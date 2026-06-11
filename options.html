@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>ControlMap PSA Bridge — Settings</title>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; background: #f4f5fa; color: #1c2030; }
+    .wrap { max-width: 720px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 20px; }
+    .card { background: #fff; border: 1px solid #e6e8f0; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+    .card h2 { margin: 0 0 12px; font-size: 15px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: #555c70; margin: 10px 0 4px; }
+    input, select { width: 100%; padding: 8px 10px; border: 1px solid #ccd0dd; border-radius: 6px; font-size: 13px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .btn { margin-top: 14px; padding: 9px 16px; border-radius: 6px; border: 1px solid #7c5cff; background: #7c5cff; color: #fff; font-weight: 600; cursor: pointer; }
+    .btn.ghost { background: #fff; color: #7c5cff; margin-left: 8px; }
+    .msg { font-size: 13px; margin-top: 10px; padding: 8px 12px; border-radius: 6px; display: none; }
+    .msg.ok { display: block; background: #e7f7ed; color: #046c4e; }
+    .msg.err { display: block; background: #fde8e8; color: #9b1c1c; }
+    .hint { font-size: 11px; color: #8a90a5; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eef0f6; }
+    td button { border: none; background: none; color: #9b1c1c; cursor: pointer; }
+    .psa-tabs { display: flex; gap: 8px; margin-bottom: 4px; }
+    .psa-tab { flex: 1; padding: 10px; border: 2px solid #ccd0dd; border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 600; color: #555c70; }
+    .psa-tab.active { border-color: #7c5cff; color: #7c5cff; background: #f5f2ff; }
+    .psa-pane { display: none; }
+    .psa-pane.active { display: block; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>ControlMap PSA Bridge</h1>
+
+    <div class="card">
+      <h2>ScalePad / ControlMap API</h2>
+      <label>API key</label>
+      <input id="spKey" type="password" placeholder="xxxxxxxx-xxxxxxxx-…" />
+      <div class="hint">Generate in the ScalePad app (Settings → API). Stored locally in your browser only.</div>
+      <label>Region</label>
+      <select id="spRegion">
+        <option value="us">US (api.scalepad.com)</option>
+        <option value="eu">EU (eu.api.scalepad.com)</option>
+        <option value="ca">CA (ca.api.scalepad.com)</option>
+        <option value="au">AU (au.api.scalepad.com)</option>
+      </select>
+      <button class="btn ghost" id="testSp">Test connection</button>
+      <div class="msg" id="spMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>PSA</h2>
+      <div class="psa-tabs">
+        <button class="psa-tab" data-psa="autotask" type="button">Autotask</button>
+        <button class="psa-tab" data-psa="connectwise" type="button">ConnectWise Manage</button>
+        <button class="psa-tab" data-psa="halo" type="button">HaloPSA</button>
+      </div>
+      <div class="hint">The selected PSA is where Create Ticket sends tickets. Credentials for each are kept separately.</div>
+
+      <div class="psa-pane" id="pane-autotask">
+        <div class="row">
+          <div><label>API integration code</label><input id="atCode" type="password" /></div>
+          <div><label>API username</label><input id="atUser" type="text" placeholder="user@example.com" /></div>
+        </div>
+        <label>API secret</label>
+        <input id="atSecret" type="password" />
+        <div class="hint">Create an API-only user in Autotask (Admin → Resources → API User). Zone is auto-detected.</div>
+      </div>
+
+      <div class="psa-pane" id="pane-connectwise">
+        <div class="row">
+          <div><label>Site</label><input id="cwSite" type="text" placeholder="api-na.myconnectwise.net" /></div>
+          <div><label>Company ID</label><input id="cwCompany" type="text" placeholder="yourcompany" /></div>
+        </div>
+        <div class="row">
+          <div><label>Public key</label><input id="cwPublic" type="password" /></div>
+          <div><label>Private key</label><input id="cwPrivate" type="password" /></div>
+        </div>
+        <label>clientId (developer.connectwise.com)</label>
+        <input id="cwClientId" type="password" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        <div class="hint">Create API Member keys in ConnectWise (System → Members → API Members). The clientId is registered free at developer.connectwise.com. Cloud sites: api-na / api-eu / api-au .myconnectwise.net.</div>
+      </div>
+
+      <div class="psa-pane" id="pane-halo">
+        <div class="row">
+          <div><label>Base URL</label><input id="haloUrl" type="text" placeholder="yourcompany.halopsa.com" /></div>
+          <div><label>Tenant (optional)</label><input id="haloTenant" type="text" placeholder="usually blank" /></div>
+        </div>
+        <div class="row">
+          <div><label>Client ID</label><input id="haloClientId" type="password" /></div>
+          <div><label>Client secret</label><input id="haloSecret" type="password" /></div>
+        </div>
+        <div class="hint">In HaloPSA: Configuration → Integrations → HaloPSA API → Applications → add an app with "Client ID and Secret (Services)" auth and ticket read/edit + client read scopes.</div>
+      </div>
+
+      <button class="btn ghost" id="testPsa">Test connection</button>
+      <div class="msg" id="psaMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Ticket defaults</h2>
+      <div class="hint">Loaded from the selected PSA after a successful connection test. Pre-selected in the Create Ticket modal; changeable per ticket.</div>
+      <div class="row" id="defaultsGrid"></div>
+      <button class="btn ghost" id="loadPicklists">Load / reload fields</button>
+      <div class="msg" id="defMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Tenant mappings (ControlMap → client → PSA company)</h2>
+      <div class="hint">Map a ControlMap tenant subdomain (e.g. <b>carb1</b> from carb1.app.ctrlmap.com) to the ScalePad client, and optionally pre-pick the PSA company. Manual mappings take priority over auto-detection.</div>
+      <div class="row">
+        <div>
+          <label>Tenant subdomain</label>
+          <input id="tnSub" type="text" placeholder="carb1" />
+        </div>
+        <div>
+          <label>ScalePad client <button class="btn ghost" id="tnLoad" style="margin:0 0 0 6px;padding:2px 8px;font-size:11px" type="button">Load clients</button></label>
+          <select id="tnClient"><option value="">— load clients first —</option></select>
+        </div>
+      </div>
+      <label>PSA company (optional, searches the selected PSA)</label>
+      <input id="tnCompany" type="text" placeholder="Search companies…" autocomplete="off" />
+      <div id="tnCompanyResults" style="border:1px solid #ccd0dd;border-radius:6px;max-height:140px;overflow:auto;display:none"></div>
+      <button class="btn ghost" id="tnAdd">Add mapping</button>
+      <div class="msg" id="tnMsg"></div>
+      <table id="tenantTable"><thead><tr><th>Subdomain</th><th>ScalePad client</th><th>PSA company</th><th></th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>Client → company mappings (current PSA)</h2>
+      <div class="hint">Saved automatically the first time you create a ticket for a client. Remove a row to re-map.</div>
+      <table id="mapTable"><thead><tr><th>ControlMap client</th><th>PSA company</th><th></th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <button class="btn" id="save">Save settings</button>
+    <div class="msg" id="saveMsg"></div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

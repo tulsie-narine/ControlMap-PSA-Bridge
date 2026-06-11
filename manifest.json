@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "ControlMap PSA Bridge",
+  "version": "0.2.0",
+  "description": "Adds a 'Create Ticket' button to ControlMap action items and creates pre-filled tickets in your PSA (Autotask, ConnectWise Manage, or HaloPSA).",
+  "permissions": ["storage", "declarativeNetRequest"],
+  "host_permissions": [
+    "https://*.app.ctrlmap.com/*",
+    "https://api.scalepad.com/*",
+    "https://eu.api.scalepad.com/*",
+    "https://ca.api.scalepad.com/*",
+    "https://au.api.scalepad.com/*",
+    "https://*.autotask.net/*",
+    "https://*.myconnectwise.net/*",
+    "https://*.halopsa.com/*",
+    "https://*.haloitsm.com/*"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      { "id": "strip_origin", "enabled": true, "path": "rules.json" }
+    ]
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.app.ctrlmap.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html",
+  "action": {
+    "default_title": "ControlMap PSA Bridge — open settings"
+  }
+}

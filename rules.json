@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "origin", "operation": "remove" },
+        { "header": "referer", "operation": "remove" },
+        { "header": "sec-fetch-site", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "requestDomains": ["api.scalepad.com", "autotask.net", "myconnectwise.net", "halopsa.com", "haloitsm.com"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  }
+]

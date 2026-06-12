@@ -424,23 +424,43 @@
     titleIn.value = `PSA ticket evidence — ${query.from || "…"} to ${query.to || "…"}`;
     const evidenceSel = el("select", { disabled: "true" });
     evidenceSel.appendChild(el("option", { value: "", text: "— loading evidences… —" }));
+    const evFilter = el("input", { type: "text", placeholder: "filter evidences by code or title…", style: "margin:4px 0" });
+    const evMsg = el("div", { class: "hint", text: "" });
+    let evidenceList = [];
+
+    function fillEvidenceSelect() {
+      const q = evFilter.value.trim().toLowerCase();
+      const keep = evidenceSel.value;
+      const matches = evidenceList.filter((ev) => !q || `${ev.code || ""} ${ev.title || ""}`.toLowerCase().includes(q));
+      evidenceSel.innerHTML = "";
+      evidenceSel.appendChild(el("option", { value: "", text: `— select evidence (${matches.length} of ${evidenceList.length}) —` }));
+      for (const ev of matches.slice(0, 300)) {
+        evidenceSel.appendChild(el("option", { value: String(ev.id), text: `${ev.code || ev.id} — ${String(ev.title || "").slice(0, 70)}` }));
+      }
+      if (keep && matches.some((ev) => String(ev.id) === keep)) evidenceSel.value = keep;
+    }
+    evFilter.addEventListener("input", fillEvidenceSelect);
 
     targetWrap.appendChild(el("label", { style: "display:flex;gap:8px;align-items:center;font-weight:400" }, [modeNew, el("span", { text: "Create new evidence" })]));
     targetWrap.appendChild(titleIn);
     targetWrap.appendChild(el("label", { style: "display:flex;gap:8px;align-items:center;font-weight:400;margin-top:8px" }, [modeExist, el("span", { text: "Add to existing evidence (as a new request)" })]));
+    targetWrap.appendChild(evFilter);
     targetWrap.appendChild(evidenceSel);
+    targetWrap.appendChild(evMsg);
 
     send({ type: "LIST_EVIDENCES", subdomain: subdomain() }).then(({ evidences }) => {
-      evidenceSel.innerHTML = "";
-      evidenceSel.appendChild(el("option", { value: "", text: "— select evidence —" }));
-      for (const ev of evidences) evidenceSel.appendChild(el("option", { value: String(ev.id), text: `${ev.code || ev.id} — ${String(ev.title || "").slice(0, 60)}` }));
-    }).catch(() => {
+      evidenceList = evidences || [];
+      if (!evidenceList.length) evMsg.textContent = "No evidences returned for this client.";
+      fillEvidenceSelect();
+    }).catch((e) => {
       evidenceSel.innerHTML = "";
       evidenceSel.appendChild(el("option", { value: "", text: "— could not load evidences —" }));
+      evMsg.textContent = e.message;
     });
     function syncMode() {
       titleIn.disabled = !modeNew.checked;
       evidenceSel.disabled = !modeExist.checked;
+      evFilter.disabled = !modeExist.checked;
     }
     modeNew.addEventListener("change", syncMode);
     modeExist.addEventListener("change", syncMode);

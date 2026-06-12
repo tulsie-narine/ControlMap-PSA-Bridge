@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ControlMap Bridge",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Context-aware overlay for ControlMap: PSA ticketing (Autotask, ConnectWise, HaloPSA) plus an open integration framework that pulls compliance evidence from security tools (SentinelOne first) and proposes assessment answers.",
   "permissions": [
     "storage",

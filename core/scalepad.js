@@ -124,12 +124,21 @@ export async function saveAnswer(settings, clientId, questionCode, answer) {
 
 /** List client evidences (summary only) for the "add to existing" picker. */
 export async function listEvidences(settings, clientId) {
-  const r = await spFetch(settings, `/controlmap/v1/clients/${encodeURIComponent(clientId)}/evidences/search`, {
-    method: "POST",
-    body: JSON.stringify({ page_size: 200, fetch_items: false, evidence_request: false, sort: "-updated_at" }),
-  });
-  const data = r?.evidences?.data || [];
-  return data.map((e) => ({ id: e.id, code: e.code, title: e.title }));
+  // NOTE: fetch_items must be true — false returns the summary only (no list).
+  const out = [];
+  let cursor = null;
+  for (let i = 0; i < 10; i++) {
+    const body = { page_size: 200, fetch_items: true, evidence_request: false, sort: "-updated_at" };
+    if (cursor) body.cursor = cursor;
+    const r = await spFetch(settings, `/controlmap/v1/clients/${encodeURIComponent(clientId)}/evidences/search`, {
+      method: "POST", body: JSON.stringify(body),
+    });
+    const data = r?.evidences?.data || [];
+    for (const e of data) out.push({ id: e.id, code: e.code, title: e.title });
+    cursor = r?.evidences?.next_cursor || null;
+    if (!cursor || data.length === 0) break;
+  }
+  return out;
 }
 
 /**

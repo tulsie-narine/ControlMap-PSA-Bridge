@@ -214,6 +214,20 @@
       panelBody.appendChild(el("div", { class: "hint", text: "Checks below are ranked by relevance to this question. Results are proposed — nothing is written to ControlMap without your confirmation." }));
     }
 
+    // --- ticket evidence collection ---
+    if (data.client) {
+      const teBtn = el("button", { class: "btn", text: "▸ Collect tickets as evidence", style: "margin:8px 0;width:100%;text-align:left" });
+      const teWrap = el("div", { style: "display:none" });
+      teBtn.addEventListener("click", () => {
+        const open = teWrap.style.display !== "none";
+        teWrap.style.display = open ? "none" : "block";
+        teBtn.textContent = (open ? "▸" : "▾") + " Collect tickets as evidence";
+        if (!open && !teWrap._built) { teWrap._built = true; buildTicketEvidenceSection(teWrap, ctx); }
+      });
+      panelBody.appendChild(teBtn);
+      panelBody.appendChild(teWrap);
+    }
+
     // --- integrations ---
     const enabled = data.integrations.filter((i) => i.enabled);
     if (!enabled.length) {
@@ -316,6 +330,154 @@
     row.appendChild(el("button", { class: "btn small", text: "Cancel", onclick: () => conf.remove() }));
     conf.appendChild(row);
     resBox.appendChild(conf);
+  }
+
+  // ===================== ticket evidence collection =====================
+
+  async function buildTicketEvidenceSection(wrap, ctx) {
+    wrap.innerHTML = "";
+    const box = el("div", { class: "icl" });
+    wrap.appendChild(box);
+    box.appendChild(el("div", { class: "hint", text: "Filter PSA tickets for this client and attach them to ControlMap as an evidence package (JSON, SHA-256 stamped). Weak tickets (no close date / description) are flagged." }));
+
+    // --- filters ---
+    const today = new Date();
+    const past = new Date(Date.now() - 90 * 86400000);
+    const iso = (d) => d.toISOString().slice(0, 10);
+    const fromIn = el("input", { type: "date" }); fromIn.value = iso(past);
+    const toIn = el("input", { type: "date" }); toIn.value = iso(today);
+    const textIn = el("input", { type: "text", placeholder: "title contains… (optional)" });
+    const fgrid = el("div", { class: "grid" }, [
+      el("div", {}, [el("label", { text: "From" }), fromIn]),
+      el("div", {}, [el("label", { text: "To" }), toIn]),
+    ]);
+    box.appendChild(fgrid);
+    box.appendChild(el("div", {}, [el("label", { text: "Text filter" }), textIn]));
+
+    const psaSels = {};
+    const psaFilterWrap = el("div", { class: "grid" });
+    box.appendChild(psaFilterWrap);
+    try {
+      const { filters } = await send({ type: "GET_TICKET_FILTERS" });
+      for (const f of filters) {
+        const sel = el("select");
+        sel.appendChild(el("option", { value: "", text: `any ${f.label.toLowerCase()}` }));
+        for (const o of f.options || []) sel.appendChild(el("option", { value: String(o.value), text: o.label }));
+        psaSels[f.key] = sel;
+        psaFilterWrap.appendChild(el("div", {}, [el("label", { text: f.label }), sel]));
+      }
+    } catch (e) {
+      box.appendChild(el("div", { class: "status err", text: e.message }));
+    }
+
+    const searchBtn = el("button", { class: "btn primary small", text: "Search tickets", style: "margin-top:8px" });
+    box.appendChild(searchBtn);
+    const resultBox = el("div");
+    box.appendChild(resultBox);
+
+    searchBtn.addEventListener("click", async () => {
+      searchBtn.disabled = true; searchBtn.textContent = "Searching…";
+      resultBox.innerHTML = "";
+      const query = {
+        from: fromIn.value || null,
+        to: toIn.value || null,
+        text: textIn.value.trim() || null,
+        filters: Object.fromEntries(Object.entries(psaSels).map(([k, s]) => [k, s.value]).filter(([, v]) => v)),
+      };
+      try {
+        const r = await send({ type: "SEARCH_TICKETS", subdomain: subdomain(), query });
+        renderTicketResults(resultBox, r, query, ctx);
+      } catch (e) {
+        resultBox.appendChild(el("div", { class: "status err", text: e.message }));
+      }
+      searchBtn.disabled = false; searchBtn.textContent = "Search tickets";
+    });
+  }
+
+  function renderTicketResults(resultBox, r, query, ctx) {
+    resultBox.innerHTML = "";
+    const { tickets, stats, company } = r;
+    resultBox.appendChild(el("div", { class: "status info", text: `${stats.found} ticket(s) for ${company.companyName || "company"} — ${stats.closed} closed, ${stats.open} open${stats.weak ? `, ⚠ ${stats.weak} weak` : ""}.` }));
+    if (!tickets.length) return;
+
+    const selected = new Set(tickets.map((t) => String(t.id)));
+    const list = el("div", { style: "max-height:200px;overflow:auto;border:1px solid #eef0f6;border-radius:8px;padding:4px 8px" });
+    for (const t of tickets.slice(0, 100)) {
+      const row = el("label", { style: "display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid #f4f5fa;font-weight:400;cursor:pointer" });
+      const cb = el("input", { type: "checkbox", style: "width:auto;margin-top:2px" });
+      cb.checked = true;
+      cb.addEventListener("change", () => cb.checked ? selected.add(String(t.id)) : selected.delete(String(t.id)));
+      const weak = !t.closedAt || !(t.description || "").trim();
+      const info = el("div", { style: "font-size:11.5px" });
+      info.innerHTML = `<b>${t.number || t.id}</b> ${String(t.title || "").slice(0, 70)}${weak ? " ⚠" : ""}<br><span style="color:#8a90a5">${t.status || "?"} · ${(t.createdAt || "").slice(0, 10)}${t.closedAt ? " → " + String(t.closedAt).slice(0, 10) : ""}</span>`;
+      row.appendChild(cb); row.appendChild(info);
+      list.appendChild(row);
+    }
+    resultBox.appendChild(list);
+
+    // --- target ---
+    const targetWrap = el("div", { style: "margin-top:10px" });
+    resultBox.appendChild(targetWrap);
+    const modeNew = el("input", { type: "radio", name: "te-mode", style: "width:auto" }); modeNew.checked = true;
+    const modeExist = el("input", { type: "radio", name: "te-mode", style: "width:auto" });
+    const titleIn = el("input", { type: "text" });
+    titleIn.value = `PSA ticket evidence — ${query.from || "…"} to ${query.to || "…"}`;
+    const evidenceSel = el("select", { disabled: "true" });
+    evidenceSel.appendChild(el("option", { value: "", text: "— loading evidences… —" }));
+
+    targetWrap.appendChild(el("label", { style: "display:flex;gap:8px;align-items:center;font-weight:400" }, [modeNew, el("span", { text: "Create new evidence" })]));
+    targetWrap.appendChild(titleIn);
+    targetWrap.appendChild(el("label", { style: "display:flex;gap:8px;align-items:center;font-weight:400;margin-top:8px" }, [modeExist, el("span", { text: "Add to existing evidence (as a new request)" })]));
+    targetWrap.appendChild(evidenceSel);
+
+    send({ type: "LIST_EVIDENCES", subdomain: subdomain() }).then(({ evidences }) => {
+      evidenceSel.innerHTML = "";
+      evidenceSel.appendChild(el("option", { value: "", text: "— select evidence —" }));
+      for (const ev of evidences) evidenceSel.appendChild(el("option", { value: String(ev.id), text: `${ev.code || ev.id} — ${String(ev.title || "").slice(0, 60)}` }));
+    }).catch(() => {
+      evidenceSel.innerHTML = "";
+      evidenceSel.appendChild(el("option", { value: "", text: "— could not load evidences —" }));
+    });
+    function syncMode() {
+      titleIn.disabled = !modeNew.checked;
+      evidenceSel.disabled = !modeExist.checked;
+    }
+    modeNew.addEventListener("change", syncMode);
+    modeExist.addEventListener("change", syncMode);
+    syncMode();
+
+    if (ctx.questionCode) {
+      targetWrap.appendChild(el("div", { class: "hint", text: `New evidence will be mapped to ${ctx.questionCode}.` }));
+    }
+
+    const attachBtn = el("button", { class: "btn primary small", text: "Attach as evidence", style: "margin-top:10px" });
+    const outBox = el("div");
+    resultBox.appendChild(attachBtn);
+    resultBox.appendChild(outBox);
+
+    attachBtn.addEventListener("click", async () => {
+      outBox.innerHTML = "";
+      const chosen = tickets.filter((t) => selected.has(String(t.id)));
+      if (!chosen.length) { outBox.appendChild(el("div", { class: "status err", text: "Select at least one ticket." })); return; }
+      const target = modeExist.checked
+        ? { mode: "existing", evidenceId: Number(evidenceSel.value) }
+        : { mode: "new", title: titleIn.value.trim() };
+      if (target.mode === "existing" && !target.evidenceId) {
+        outBox.appendChild(el("div", { class: "status err", text: "Select the existing evidence." })); return;
+      }
+      attachBtn.disabled = true; attachBtn.textContent = "Collecting…";
+      try {
+        const res = await send({ type: "COLLECT_TICKET_EVIDENCE", subdomain: subdomain(), query, tickets: chosen, target, questionCode: ctx.questionCode || null });
+        const label = res.mode === "existing"
+          ? `Added request to evidence #${res.evidenceId} with ${chosen.length} ticket(s). sha256:${res.hash.slice(0, 12)}…`
+          : `Evidence created (id ${res.evidenceId}) with ${chosen.length} ticket(s). sha256:${res.hash.slice(0, 12)}…`;
+        outBox.appendChild(el("div", { class: "status ok", text: label }));
+        attachBtn.textContent = "Done";
+      } catch (e) {
+        outBox.appendChild(el("div", { class: "status err", text: e.message }));
+        attachBtn.disabled = false; attachBtn.textContent = "Attach as evidence";
+      }
+    });
   }
 
   // ===================== ticket modal (from v0.2) =====================

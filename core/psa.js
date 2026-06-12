@@ -289,6 +289,174 @@ const haloAdapter = {
   },
 };
 
+// =====================================================================
+// Ticket evidence collection — each adapter implements:
+//   getTicketFilters(settings) -> [{key,label,options}] PSA-specific selects
+//   searchTickets(settings, q) -> normalized tickets
+//     q: { companyID, from "YYYY-MM-DD", to "YYYY-MM-DD", text, filters:{key:value} }
+//     ticket: { id, number, title, status, type, priority, createdAt, closedAt, owner, description }
+//   getTicketNotes(settings, ticketId) -> [{at, author, text}]
+// =====================================================================
+
+// ---------- Autotask ----------
+
+autotaskAdapter.getTicketFilters = async function (settings) {
+  const fields = await this.getFields(settings);
+  return fields.filter((f) => ["status", "queueID", "ticketType"].includes(f.key));
+};
+
+autotaskAdapter.searchTickets = async function (settings, q) {
+  const items = [{ op: "eq", field: "companyID", value: Number(q.companyID) }];
+  if (q.from) items.push({ op: "gte", field: "createDate", value: `${q.from}T00:00:00Z` });
+  if (q.to) items.push({ op: "lte", field: "createDate", value: `${q.to}T23:59:59Z` });
+  if (q.text) items.push({ op: "contains", field: "title", value: q.text });
+  const f = q.filters || {};
+  if (f.status) items.push({ op: "eq", field: "status", value: Number(f.status) });
+  if (f.queueID) items.push({ op: "eq", field: "queueID", value: Number(f.queueID) });
+  if (f.ticketType) items.push({ op: "eq", field: "ticketType", value: Number(f.ticketType) });
+
+  const body = await atFetch(settings, "Tickets/query", {
+    method: "POST",
+    body: JSON.stringify({
+      MaxRecords: 200,
+      IncludeFields: ["id", "ticketNumber", "title", "description", "status", "priority", "createDate", "completedDate", "queueID", "ticketType", "ticketCategory"],
+      Filter: [{ op: "and", items }],
+    }),
+  });
+
+  // map picklist values to labels
+  let labels = { status: {}, priority: {} };
+  try {
+    const fields = await this.getFields(settings);
+    for (const key of ["status", "priority"]) {
+      for (const o of fields.find((x) => x.key === key)?.options || []) labels[key][o.value] = o.label;
+    }
+  } catch { /* labels optional */ }
+
+  return (body.items || []).map((t) => ({
+    id: t.id,
+    number: t.ticketNumber,
+    title: t.title,
+    status: labels.status[String(t.status)] || String(t.status ?? ""),
+    type: String(t.ticketType ?? ""),
+    priority: labels.priority[String(t.priority)] || String(t.priority ?? ""),
+    createdAt: t.createDate || null,
+    closedAt: t.completedDate || null,
+    owner: null,
+    description: (t.description || "").slice(0, 2000),
+  }));
+};
+
+autotaskAdapter.getTicketNotes = async function (settings, ticketId) {
+  const body = await atFetch(settings, "TicketNotes/query", {
+    method: "POST",
+    body: JSON.stringify({
+      MaxRecords: 50,
+      IncludeFields: ["id", "title", "description", "createDateTime", "creatorResourceID"],
+      Filter: [{ op: "eq", field: "ticketID", value: Number(ticketId) }],
+    }),
+  });
+  return (body.items || []).map((n) => ({
+    at: n.createDateTime || null,
+    author: n.creatorResourceID != null ? `resource ${n.creatorResourceID}` : null,
+    text: [n.title, n.description].filter(Boolean).join(" — ").slice(0, 2000),
+  }));
+};
+
+// ---------- ConnectWise Manage ----------
+
+connectwiseAdapter.getTicketFilters = async function (settings) {
+  const boards = await cwFetch(settings, "/service/boards?pageSize=100&fields=id,name&orderBy=name", { method: "GET" });
+  return [{ key: "board", label: "Service board", options: boards.map((b) => ({ value: String(b.id), label: b.name })) }];
+};
+
+connectwiseAdapter.searchTickets = async function (settings, q) {
+  const conds = [`company/id=${Number(q.companyID)}`];
+  if (q.from) conds.push(`dateEntered >= [${q.from}T00:00:00Z]`);
+  if (q.to) conds.push(`dateEntered <= [${q.to}T23:59:59Z]`);
+  if (q.filters?.board) conds.push(`board/id=${Number(q.filters.board)}`);
+  if (q.text) conds.push(`summary like "%${q.text.replace(/["\\]/g, "")}%"`);
+  const conditions = encodeURIComponent(conds.join(" and "));
+  const body = await cwFetch(settings, `/service/tickets?pageSize=200&conditions=${conditions}&orderBy=dateEntered desc`, { method: "GET" });
+  return (Array.isArray(body) ? body : []).map((t) => ({
+    id: t.id,
+    number: `#${t.id}`,
+    title: t.summary,
+    status: t.status?.name || "",
+    type: [t.type?.name, t.subType?.name].filter(Boolean).join(" / "),
+    priority: t.priority?.name || "",
+    createdAt: t.dateEntered || t._info?.dateEntered || null,
+    closedAt: t.closedDate || null,
+    owner: t.owner?.name || null,
+    description: "",
+  }));
+};
+
+connectwiseAdapter.getTicketNotes = async function (settings, ticketId) {
+  const body = await cwFetch(settings, `/service/tickets/${ticketId}/allNotes?pageSize=50`, { method: "GET" });
+  return (Array.isArray(body) ? body : []).map((n) => ({
+    at: n.dateCreated || n._info?.dateEntered || null,
+    author: n.createdBy || n.member?.name || null,
+    text: (n.text || "").slice(0, 2000),
+  }));
+};
+
+// ---------- HaloPSA ----------
+
+haloAdapter.getTicketFilters = async function (settings) {
+  const fields = await this.getFields(settings);
+  return fields.filter((f) => ["tickettype", "status"].includes(f.key));
+};
+
+haloAdapter.searchTickets = async function (settings, q) {
+  const params = new URLSearchParams({ client_id: String(Number(q.companyID)), count: "200" });
+  if (q.filters?.tickettype) params.set("tickettype_id", String(Number(q.filters.tickettype)));
+  if (q.text) params.set("search", q.text);
+  const body = await haloFetch(settings, `/Tickets?${params.toString()}`, { method: "GET" });
+  let tickets = Array.isArray(body) ? body : body?.tickets || [];
+
+  // status labels
+  let statusNames = {};
+  try {
+    const fields = await this.getFields(settings);
+    for (const o of fields.find((x) => x.key === "status")?.options || []) statusNames[o.value] = o.label;
+  } catch { /* optional */ }
+
+  const fromTs = q.from ? Date.parse(`${q.from}T00:00:00Z`) : null;
+  const toTs = q.to ? Date.parse(`${q.to}T23:59:59Z`) : null;
+  const out = [];
+  for (const t of tickets) {
+    const created = t.dateoccurred || t.datecreated || t.date_occurred || null;
+    const ts = created ? Date.parse(created) : null;
+    if (fromTs && ts && ts < fromTs) continue;
+    if (toTs && ts && ts > toTs) continue;
+    if (q.filters?.status && String(t.status_id) !== String(q.filters.status)) continue;
+    out.push({
+      id: t.id,
+      number: `#${t.id}`,
+      title: t.summary || "",
+      status: statusNames[String(t.status_id)] || String(t.status_id ?? ""),
+      type: String(t.tickettype_id ?? ""),
+      priority: String(t.priority_id ?? ""),
+      createdAt: created,
+      closedAt: t.dateclosed || t.date_closed || t.closuredate || null,
+      owner: t.agent_name || null,
+      description: (t.details || "").slice(0, 2000),
+    });
+  }
+  return out;
+};
+
+haloAdapter.getTicketNotes = async function (settings, ticketId) {
+  const body = await haloFetch(settings, `/Actions?ticket_id=${Number(ticketId)}&count=50`, { method: "GET" });
+  const actions = Array.isArray(body) ? body : body?.actions || [];
+  return actions.map((a) => ({
+    at: a.datetime || a.actiondatecreated || null,
+    author: a.who || a.createdby || null,
+    text: (a.note || a.outcome || "").slice(0, 2000),
+  })).filter((n) => n.text);
+};
+
 export const PSA_ADAPTERS = { autotask: autotaskAdapter, connectwise: connectwiseAdapter, halo: haloAdapter };
 
 export function suggestPriority(cmPriority, fields) {

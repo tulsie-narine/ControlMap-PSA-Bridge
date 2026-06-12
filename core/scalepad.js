@@ -121,3 +121,35 @@ export async function saveAnswer(settings, clientId, questionCode, answer) {
     method: "PUT", body: JSON.stringify({ answer }),
   });
 }
+
+/** List client evidences (summary only) for the "add to existing" picker. */
+export async function listEvidences(settings, clientId) {
+  const r = await spFetch(settings, `/controlmap/v1/clients/${encodeURIComponent(clientId)}/evidences/search`, {
+    method: "POST",
+    body: JSON.stringify({ page_size: 200, fetch_items: false, evidence_request: false, sort: "-updated_at" }),
+  });
+  const data = r?.evidences?.data || [];
+  return data.map((e) => ({ id: e.id, code: e.code, title: e.title }));
+}
+
+/**
+ * Add a NEW evidence request to an EXISTING evidence and attach a JSON package
+ * as its document. Optionally PATCHes the created request with notes.
+ */
+export async function addEvidenceRequestWithDocument(settings, clientId, evidenceId, { snapshot, fileName, note }) {
+  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+  const fd = new FormData();
+  fd.append("file", blob, fileName || `evidence-${Date.now()}.json`);
+  const up = await spFetch(settings, `/controlmap/v1/clients/${encodeURIComponent(clientId)}/evidences/${evidenceId}/documents`, {
+    method: "POST", body: fd, multipart: true,
+  });
+  const evidenceRequestId = up?.evidence_request_id ?? null;
+  if (evidenceRequestId && note) {
+    try {
+      await spFetch(settings, `/controlmap/v1/clients/${encodeURIComponent(clientId)}/evidence-requests/${evidenceRequestId}`, {
+        method: "PATCH", body: JSON.stringify({ implementation_notes: String(note).slice(0, 3000) }),
+      });
+    } catch { /* notes are best-effort */ }
+  }
+  return { evidenceRequestId, documents: up?.documents || [] };
+}

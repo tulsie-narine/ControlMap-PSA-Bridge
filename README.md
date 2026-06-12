@@ -51,6 +51,17 @@ REST-only subset of the 37-check whitepaper catalog: coverage (S1-AM-01), stale 
 
 Licensed-module endpoints degrade to **not-licensed** rather than fail. GraphQL surfaces (XSPM vulnerabilities/misconfigurations, unified alerts) are phase 2 — schemas need live-tenant validation.
 
+## Ticket evidence collection (v0.4)
+
+The launcher panel includes **Collect tickets as evidence** on any page where the client is resolved. Pick a date range, text filter, and PSA-specific filters (Autotask status/queue/type, ConnectWise board, Halo ticket type/status), search, then review the ticket list — every ticket is pre-selected, and tickets missing a close date or description are flagged **⚠ weak** so you attach defensible evidence, not noise.
+
+Choose the destination:
+
+- **Create new evidence** — `POST /clients/{id}/evidences` (mapped to the current assessment question when used from a question page), or
+- **Add to existing evidence** — creates a **new evidence request** inside the chosen evidence (`POST /evidences/{id}/documents`) so recurring collections (quarterly incident reviews, monthly access-change pulls) accumulate under one evidence record.
+
+Either way the attached document is a JSON evidence package: collection metadata (source PSA, client, query, collector version, timestamp), summary stats (found/closed/open/weak), per-ticket fields (id, number, title, status, type, priority, created/closed dates, owner, description), ticket notes for the first 25 tickets, and a `sha256` integrity hash stamped into both the package and the evidence description.
+
 ## Building your own integration
 
 See **docs/BUILDING_INTEGRATIONS.md**. Short version: one folder, one `integration.js` exporting `{ id, name, configSchema, test, checks[] }`, one import line in `integrations/registry.js`, plus host permissions. The options form, panel UI, evidence pipeline, and answer flow come free.
@@ -66,6 +77,6 @@ See **docs/BUILDING_INTEGRATIONS.md**. Short version: one folder, one `integrati
 ## Roadmap
 
 - More integrations: Microsoft Defender, Huntress, backup posture (Backup Radar), M365 secure score.
-- Write-back to action items (ticket number note, status → In Progress).
+- Write-back to action items (ticket number note, status → In Progress).\n- Saved evidence rules (named queries per control, re-run each period) + PDF rendering of ticket packages.
 - Scheduled check runs with drift alerts.
 - Full 37-check SentinelOne catalog incl. GraphQL surfaces.

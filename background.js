@@ -58,6 +58,17 @@ async function runCheck(settings, integrationId, checkId) {
   return res;
 }
 
+async function sha256Hex(str) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+function ticketStats(tickets) {
+  const closed = tickets.filter((t) => t.closedAt).length;
+  const weak = tickets.filter((t) => !t.closedAt || !(t.description || "").trim()).length;
+  return { found: tickets.length, closed, open: tickets.length - closed, weak };
+}
+
 // ---------- message router ----------
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -193,6 +204,78 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           out.answer = await sp.saveAnswer(settings, client.id, msg.questionCode, msg.answer);
         }
         return out;
+      }
+
+      // ===== ticket evidence collection =====
+      case "GET_TICKET_FILTERS":
+        return { psaName: psa.name, filters: await psa.getTicketFilters(settings) };
+      case "SEARCH_TICKETS": {
+        const client = await sp.resolveTenant(settings, msg.subdomain);
+        const mapped = (settings.clientMap2[settings.psa] || {})[client.id];
+        if (!mapped?.companyID) throw new Error(`No ${psa.name} company mapped for "${client.name}". Map it in options (Tenant mappings) or create one ticket first.`);
+        const tickets = await psa.searchTickets(settings, { ...msg.query, companyID: mapped.companyID });
+        return { client, company: mapped, tickets, stats: ticketStats(tickets) };
+      }
+      case "LIST_EVIDENCES": {
+        const client = await sp.resolveTenant(settings, msg.subdomain);
+        return { evidences: await sp.listEvidences(settings, client.id) };
+      }
+      case "COLLECT_TICKET_EVIDENCE": {
+        const client = await sp.resolveTenant(settings, msg.subdomain);
+        const tickets = (msg.tickets || []).slice(0, 100);
+        if (!tickets.length) throw new Error("No tickets selected.");
+
+        // enrich with notes (capped to keep this fast and the package small)
+        const NOTES_CAP = 25;
+        for (let i = 0; i < Math.min(tickets.length, NOTES_CAP); i++) {
+          try { tickets[i].notes = await psa.getTicketNotes(settings, tickets[i].id); }
+          catch { tickets[i].notes = []; }
+        }
+
+        const stats = ticketStats(tickets);
+        const date = new Date().toISOString().slice(0, 10);
+        const pkg = {
+          meta: {
+            kind: "psa-ticket-evidence",
+            source_system: psa.name,
+            client: { id: client.id, name: client.name },
+            collected_at: new Date().toISOString(),
+            collector: `ControlMap Bridge ${chrome.runtime.getManifest().version}`,
+            query: msg.query || {},
+            stats,
+            notes_included_for_first: Math.min(tickets.length, NOTES_CAP),
+          },
+          tickets,
+        };
+        const hash = await sha256Hex(JSON.stringify(pkg));
+        pkg.meta.evidence_hash = `sha256:${hash}`;
+
+        const summaryLines = [
+          `PSA ticket evidence — ${psa.name}`,
+          `Client: ${client.name}`,
+          msg.query?.from || msg.query?.to ? `Period: ${msg.query?.from || "…"} → ${msg.query?.to || "…"}` : null,
+          `Tickets: ${stats.found} (${stats.closed} closed, ${stats.open} open)`,
+          stats.weak ? `⚠ ${stats.weak} ticket(s) flagged weak (missing close date or description).` : "All tickets have close dates and descriptions.",
+          `Collected: ${pkg.meta.collected_at}`,
+          `Integrity: sha256:${hash.slice(0, 16)}…`,
+        ].filter(Boolean);
+        const description = summaryLines.join("\n");
+        const fileName = `psa-tickets-${date}.json`;
+
+        if (msg.target?.mode === "existing" && msg.target?.evidenceId) {
+          const r = await sp.addEvidenceRequestWithDocument(settings, client.id, msg.target.evidenceId, {
+            snapshot: pkg, fileName, note: description,
+          });
+          return { mode: "existing", evidenceId: msg.target.evidenceId, evidenceRequestId: r.evidenceRequestId, stats, hash };
+        }
+        const created = await sp.createEvidenceWithSnapshot(settings, client.id, {
+          title: msg.target?.title || `PSA ticket evidence — ${psa.name} — ${date}`,
+          description,
+          questionCodes: msg.questionCode ? [msg.questionCode] : [],
+          snapshot: pkg,
+          fileName,
+        });
+        return { mode: "new", ...created, stats, hash };
       }
 
       case "OPEN_OPTIONS":

@@ -15,6 +15,7 @@ export default {
   version: "1.0.0",
   author: "you",
   description: "One-line description shown in options + panel.",
+  icon: "integrations/defender/logo.svg",   // optional; SVG/PNG in your folder (tile + panel logo)
 
   // Renders the config form in extension options automatically.
   configSchema: [
@@ -61,6 +62,8 @@ export default {
 import defender from "./defender/integration.js";
 export const INTEGRATIONS = [sentinelone, defender];
 ```
+
+Drop a `logo.svg` (or PNG) in your folder for the settings tile and panel header; without one a generic icon is used.
 
 ## 3. Allow its API host
 

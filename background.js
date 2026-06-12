@@ -16,7 +16,7 @@ import { INTEGRATIONS, getIntegration } from "./integrations/registry.js";
 function integrationMeta(settings, i) {
   const cfg = integrationConfig(settings, i.id);
   return {
-    id: i.id, name: i.name, version: i.version, description: i.description,
+    id: i.id, name: i.name, version: i.version, description: i.description, icon: i.icon || null,
     configSchema: i.configSchema,
     enabled: !!cfg.enabled,
     configured: i.configSchema.filter((f) => f.required).every((f) => (cfg.config[f.key] || "").trim?.() !== ""),

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 230 48">
+  <path d="M10 32 Q26 10 42 32" stroke="#1b2a55" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+  <path d="M34 32 Q50 10 66 32" stroke="#1b2a55" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+  <text x="78" y="26" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="bold" letter-spacing="1" fill="#1b2a55">CONNECTWISE</text>
+  <text x="78" y="41" font-family="Arial, Helvetica, sans-serif" font-size="12" letter-spacing="2" fill="#5b6570">PSA</text>
+</svg>

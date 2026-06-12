@@ -27,6 +27,25 @@
     .psa-tab.active { border-color: #7c5cff; color: #7c5cff; background: #f5f2ff; }
     .psa-pane { display: none; }
     .psa-pane.active { display: block; }
+    .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 10px; }
+    .tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px 12px 14px; border: 2px solid #e6e8f0; border-radius: 10px; background: #fff; cursor: pointer; }
+    .tile:hover { border-color: #7c5cff; box-shadow: 0 4px 14px rgba(80,60,220,.12); }
+    .tile img { height: 32px; max-width: 124px; object-fit: contain; }
+    .tile .tname { font-size: 12px; font-weight: 600; color: #555c70; }
+    .tile .badge { position: absolute; top: 8px; right: 8px; font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 8px; }
+    .badge.active { background: #7c5cff; color: #fff; }
+    .badge.on { background: #e7f7ed; color: #046c4e; }
+    .badge.off { background: #eef0f6; color: #8a90a5; }
+    .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(10,12,30,.45); z-index: 50; align-items: center; justify-content: center; }
+    .modal-backdrop.open { display: flex; }
+    .modal { background: #fff; border-radius: 12px; width: 560px; max-width: calc(100vw - 32px); max-height: calc(100vh - 64px); overflow: auto; }
+    .mhead { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid #e6e8f0; }
+    .mhead h2 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 10px; }
+    .mhead img { height: 26px; max-width: 130px; object-fit: contain; }
+    .mclose { border: none; background: none; font-size: 18px; cursor: pointer; color: #667; }
+    .mbody { padding: 16px 20px; }
+    .mfoot { padding: 12px 20px; border-top: 1px solid #e6e8f0; display: flex; justify-content: flex-end; gap: 8px; }
+    .mfoot .btn { margin: 0; }
   </style>
 </head>
 <body>
@@ -51,57 +70,18 @@
 
     <div class="card">
       <h2>Integrations</h2>
-      <div class="hint">Compliance-data integrations surface in the on-page overlay panel. Each integration is a folder in <b>integrations/</b> — see docs/BUILDING_INTEGRATIONS.md to build your own.</div>
+      <div class="hint">Compliance-data integrations surface in the on-page overlay panel. Click a tile to configure. Each integration is a folder in <b>integrations/</b> — see docs/BUILDING_INTEGRATIONS.md to build your own.</div>
       <div id="integrationsWrap"></div>
     </div>
 
     <div class="card">
       <h2>PSA</h2>
-      <div class="psa-tabs">
-        <button class="psa-tab" data-psa="autotask" type="button">Autotask</button>
-        <button class="psa-tab" data-psa="connectwise" type="button">ConnectWise Manage</button>
-        <button class="psa-tab" data-psa="halo" type="button">HaloPSA</button>
+      <div class="hint">Click a tile to configure credentials and ticket routing. The <b>active</b> PSA is where Create Ticket sends tickets.</div>
+      <div class="tiles" id="psaTiles">
+        <button class="tile" data-psa="autotask" type="button"><img src="assets/autotask.svg" alt="Autotask" /><span class="tname">Autotask</span><span class="badge" id="badge-autotask"></span></button>
+        <button class="tile" data-psa="connectwise" type="button"><img src="assets/connectwise.svg" alt="ConnectWise PSA" /><span class="tname">ConnectWise PSA</span><span class="badge" id="badge-connectwise"></span></button>
+        <button class="tile" data-psa="halo" type="button"><img src="assets/halopsa.svg" alt="HaloPSA" /><span class="tname">HaloPSA</span><span class="badge" id="badge-halo"></span></button>
       </div>
-      <div class="hint">The selected PSA is where Create Ticket sends tickets. Credentials for each are kept separately.</div>
-
-      <div class="psa-pane" id="pane-autotask">
-        <div class="row">
-          <div><label>API integration code</label><input id="atCode" type="password" /></div>
-          <div><label>API username</label><input id="atUser" type="text" placeholder="user@example.com" /></div>
-        </div>
-        <label>API secret</label>
-        <input id="atSecret" type="password" />
-        <div class="hint">Create an API-only user in Autotask (Admin → Resources → API User). Zone is auto-detected.</div>
-      </div>
-
-      <div class="psa-pane" id="pane-connectwise">
-        <div class="row">
-          <div><label>Site</label><input id="cwSite" type="text" placeholder="api-na.myconnectwise.net" /></div>
-          <div><label>Company ID</label><input id="cwCompany" type="text" placeholder="yourcompany" /></div>
-        </div>
-        <div class="row">
-          <div><label>Public key</label><input id="cwPublic" type="password" /></div>
-          <div><label>Private key</label><input id="cwPrivate" type="password" /></div>
-        </div>
-        <label>clientId (developer.connectwise.com)</label>
-        <input id="cwClientId" type="password" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
-        <div class="hint">Create API Member keys in ConnectWise (System → Members → API Members). The clientId is registered free at developer.connectwise.com. Cloud sites: api-na / api-eu / api-au .myconnectwise.net.</div>
-      </div>
-
-      <div class="psa-pane" id="pane-halo">
-        <div class="row">
-          <div><label>Base URL</label><input id="haloUrl" type="text" placeholder="yourcompany.halopsa.com" /></div>
-          <div><label>Tenant (optional)</label><input id="haloTenant" type="text" placeholder="usually blank" /></div>
-        </div>
-        <div class="row">
-          <div><label>Client ID</label><input id="haloClientId" type="password" /></div>
-          <div><label>Client secret</label><input id="haloSecret" type="password" /></div>
-        </div>
-        <div class="hint">In HaloPSA: Configuration → Integrations → HaloPSA API → Applications → add an app with "Client ID and Secret (Services)" auth and ticket read/edit + client read scopes.</div>
-      </div>
-
-      <button class="btn ghost" id="testPsa">Test connection</button>
-      <div class="msg" id="psaMsg"></div>
     </div>
 
     <div class="card">
@@ -142,6 +122,66 @@
     <button class="btn" id="save">Save settings</button>
     <div class="msg" id="saveMsg"></div>
   </div>
+  <div class="modal-backdrop" id="psaModal">
+    <div class="modal">
+      <div class="mhead"><h2 id="psaModalTitle">Configure PSA</h2><button class="mclose" id="psaModalClose" type="button">✕</button></div>
+      <div class="mbody">
+      <div class="psa-pane" id="pane-autotask">
+        <div class="row">
+          <div><label>API integration code</label><input id="atCode" type="password" /></div>
+          <div><label>API username</label><input id="atUser" type="text" placeholder="user@example.com" /></div>
+        </div>
+        <label>API secret</label>
+        <input id="atSecret" type="password" />
+        <div class="hint">Create an API-only user in Autotask (Admin → Resources → API User). Zone is auto-detected.</div>
+      </div>
+
+      <div class="psa-pane" id="pane-connectwise">
+        <div class="row">
+          <div><label>Site</label><input id="cwSite" type="text" placeholder="api-na.myconnectwise.net" /></div>
+          <div><label>Company ID</label><input id="cwCompany" type="text" placeholder="yourcompany" /></div>
+        </div>
+        <div class="row">
+          <div><label>Public key</label><input id="cwPublic" type="password" /></div>
+          <div><label>Private key</label><input id="cwPrivate" type="password" /></div>
+        </div>
+        <label>clientId (developer.connectwise.com)</label>
+        <input id="cwClientId" type="password" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        <div class="hint">Create API Member keys in ConnectWise (System → Members → API Members). The clientId is registered free at developer.connectwise.com. Cloud sites: api-na / api-eu / api-au .myconnectwise.net.</div>
+      </div>
+
+      <div class="psa-pane" id="pane-halo">
+        <div class="row">
+          <div><label>Base URL</label><input id="haloUrl" type="text" placeholder="yourcompany.halopsa.com" /></div>
+          <div><label>Tenant (optional)</label><input id="haloTenant" type="text" placeholder="usually blank" /></div>
+        </div>
+        <div class="row">
+          <div><label>Client ID</label><input id="haloClientId" type="password" /></div>
+          <div><label>Client secret</label><input id="haloSecret" type="password" /></div>
+        </div>
+        <div class="hint">In HaloPSA: Configuration → Integrations → HaloPSA API → Applications → add an app with "Client ID and Secret (Services)" auth and ticket read/edit + client read scopes.</div>
+      </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:14px"><input type="checkbox" id="psaActiveChk" style="width:auto" /> Use as the active PSA</label>
+        <div class="msg" id="psaMsg"></div>
+      </div>
+      <div class="mfoot">
+        <button class="btn ghost" id="testPsa">Test connection</button>
+        <button class="btn" id="psaModalSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="integModal">
+    <div class="modal">
+      <div class="mhead"><h2 id="integModalTitle">Configure integration</h2><button class="mclose" id="integModalClose" type="button">✕</button></div>
+      <div class="mbody" id="integModalBody"></div>
+      <div class="mfoot">
+        <button class="btn ghost" id="integModalTest">Test connection</button>
+        <button class="btn" id="integModalSave">Save</button>
+      </div>
+    </div>
+  </div>
+
   <script src="options.js"></script>
 </body>
 </html>

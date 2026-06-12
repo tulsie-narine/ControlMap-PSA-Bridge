@@ -20,20 +20,47 @@ function flash(elId, text, ok) {
   el.className = "msg " + (ok ? "ok" : "err");
 }
 
+const PSA_NAMES = { autotask: "Autotask", connectwise: "ConnectWise PSA", halo: "HaloPSA" };
+let modalPsa = null; // PSA shown in the config modal
+
 function setActivePsa(psa) {
   currentPsa = psa;
-  document.querySelectorAll(".psa-tab").forEach((t) => t.classList.toggle("active", t.dataset.psa === psa));
-  PSAS.forEach((p) => $(`pane-${p}`).classList.toggle("active", p === psa));
+  refreshPsaTiles();
 }
 
-document.querySelectorAll(".psa-tab").forEach((t) => {
-  t.addEventListener("click", async () => {
-    setActivePsa(t.dataset.psa);
-    await persist();
-    const settings = await chrome.storage.local.get(null);
-    renderMappings(settings);
-    loadDefaultFields(settings).catch(() => {});
+function refreshPsaTiles() {
+  PSAS.forEach((p) => {
+    const b = $(`badge-${p}`);
+    if (!b) return;
+    if (p === currentPsa) { b.textContent = "ACTIVE"; b.className = "badge active"; }
+    else { b.textContent = ""; b.className = "badge"; }
   });
+}
+
+function openPsaModal(psa) {
+  modalPsa = psa;
+  $("psaModalTitle").textContent = `Configure ${PSA_NAMES[psa]}`;
+  PSAS.forEach((p) => $(`pane-${p}`).classList.toggle("active", p === psa));
+  $("psaActiveChk").checked = psa === currentPsa;
+  $("psaMsg").className = "msg";
+  $("psaModal").classList.add("open");
+}
+
+function closePsaModal() { $("psaModal").classList.remove("open"); }
+
+document.querySelectorAll("#psaTiles .tile").forEach((t) => {
+  t.addEventListener("click", () => openPsaModal(t.dataset.psa));
+});
+$("psaModalClose").addEventListener("click", closePsaModal);
+$("psaModal").addEventListener("click", (e) => { if (e.target === $("psaModal")) closePsaModal(); });
+$("psaModalSave").addEventListener("click", async () => {
+  if ($("psaActiveChk").checked) currentPsa = modalPsa;
+  await persist();
+  refreshPsaTiles();
+  flash("psaMsg", "Saved.", true);
+  const settings = await chrome.storage.local.get(null);
+  renderMappings(settings);
+  loadDefaultFields(settings).catch(() => {});
 });
 
 // ---------- ticket defaults (dynamic per PSA) ----------
@@ -324,7 +351,7 @@ $("testSp").addEventListener("click", async () => {
 $("testPsa").addEventListener("click", async () => {
   await persist();
   try {
-    const r = await send({ type: "TEST_PSA", psa: currentPsa });
+    const r = await send({ type: "TEST_PSA", psa: modalPsa || currentPsa });
     flash("psaMsg", r.summary, true);
     const settings = await chrome.storage.local.get(null);
     loadDefaultFields(settings).catch(() => {});
@@ -337,99 +364,125 @@ init();
 
 // ===================== Integrations (framework) =====================
 
+let integList = [];
+let modalInteg = null;
+let integInputs = {};
+let integToggle = null;
+
 async function renderIntegrations() {
   const wrap = $("integrationsWrap");
   if (!wrap) return;
+  wrap.className = "tiles";
   wrap.innerHTML = "";
   let data;
   try {
     data = await send({ type: "LIST_INTEGRATIONS" });
   } catch (e) {
+    wrap.className = "";
     wrap.innerHTML = `<div class="msg err" style="display:block">${e.message}</div>`;
     return;
   }
-  for (const integ of data.integrations) {
-    const box = document.createElement("div");
-    box.style.cssText = "border:1px solid #e6e8f0;border-radius:8px;padding:14px;margin-top:12px";
-    const head = document.createElement("div");
-    head.style.cssText = "display:flex;justify-content:space-between;align-items:center";
-    head.innerHTML = `<div><b>${integ.name}</b> <span class="hint">v${integ.version} · ${integ.checks.length} checks</span><div class="hint">${integ.description}</div></div>`;
-    const toggleWrap = document.createElement("label");
-    toggleWrap.style.cssText = "display:flex;align-items:center;gap:6px;font-size:12px;margin:0";
-    const toggle = document.createElement("input");
-    toggle.type = "checkbox";
-    toggle.style.width = "auto";
-    toggle.checked = integ.enabled;
-    toggleWrap.appendChild(toggle);
-    toggleWrap.appendChild(document.createTextNode("Enabled"));
-    head.appendChild(toggleWrap);
-    box.appendChild(head);
-
-    const cfg = await send({ type: "GET_INTEGRATION_CONFIG", id: integ.id });
-    const inputs = {};
-    const grid = document.createElement("div");
-    grid.className = "row";
-    for (const field of integ.configSchema) {
-      const cell = document.createElement("div");
-      const label = document.createElement("label");
-      label.textContent = field.label + (field.required ? " *" : "");
-      cell.appendChild(label);
-      const input = document.createElement("input");
-      input.type = field.type === "password" ? "password" : "text";
-      input.placeholder = field.placeholder || "";
-      input.value = cfg.config[field.key] ?? "";
-      inputs[field.key] = input;
-      cell.appendChild(input);
-      if (field.help) {
-        const h = document.createElement("div");
-        h.className = "hint";
-        h.textContent = field.help;
-        cell.appendChild(h);
-      }
-      grid.appendChild(cell);
-    }
-    box.appendChild(grid);
-
-    const btnRow = document.createElement("div");
-    const saveBtn = document.createElement("button");
-    saveBtn.className = "btn ghost";
-    saveBtn.style.marginLeft = "0";
-    saveBtn.textContent = "Save";
-    const testBtn = document.createElement("button");
-    testBtn.className = "btn ghost";
-    testBtn.textContent = "Test connection";
-    btnRow.appendChild(saveBtn);
-    btnRow.appendChild(testBtn);
-    box.appendChild(btnRow);
-    const msg = document.createElement("div");
-    msg.className = "msg";
-    box.appendChild(msg);
-
-    async function saveIntegration() {
-      const config = {};
-      for (const [k, input] of Object.entries(inputs)) config[k] = input.value.trim();
-      await send({ type: "SET_INTEGRATION_CONFIG", id: integ.id, enabled: toggle.checked, config });
-    }
-    saveBtn.addEventListener("click", async () => {
-      try { await saveIntegration(); msg.textContent = "Saved."; msg.className = "msg ok"; }
-      catch (e) { msg.textContent = e.message; msg.className = "msg err"; }
-    });
-    toggle.addEventListener("change", () => saveIntegration().catch(() => {}));
-    testBtn.addEventListener("click", async () => {
-      try {
-        await saveIntegration();
-        if (!toggle.checked) { toggle.checked = true; await saveIntegration(); }
-        const r = await send({ type: "TEST_INTEGRATION", id: integ.id });
-        msg.textContent = r.summary;
-        msg.className = "msg ok";
-      } catch (e) {
-        msg.textContent = e.message;
-        msg.className = "msg err";
-      }
-    });
-
-    wrap.appendChild(box);
+  integList = data.integrations;
+  for (const integ of integList) {
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "tile";
+    const img = document.createElement("img");
+    img.src = integ.icon || "assets/default-integration.svg";
+    img.alt = integ.name;
+    img.onerror = () => { img.src = "assets/default-integration.svg"; };
+    const name = document.createElement("span");
+    name.className = "tname";
+    name.textContent = integ.name;
+    const badge = document.createElement("span");
+    badge.className = "badge " + (integ.enabled ? "on" : "off");
+    badge.textContent = integ.enabled ? "ON" : "OFF";
+    tile.appendChild(img); tile.appendChild(name); tile.appendChild(badge);
+    tile.addEventListener("click", () => openIntegModal(integ));
+    wrap.appendChild(tile);
   }
 }
+
+async function openIntegModal(integ) {
+  modalInteg = integ;
+  integInputs = {};
+  const title = $("integModalTitle");
+  title.innerHTML = "";
+  const img = document.createElement("img");
+  img.src = integ.icon || "assets/default-integration.svg";
+  img.onerror = () => { img.src = "assets/default-integration.svg"; };
+  title.appendChild(img);
+  title.appendChild(document.createTextNode(integ.name));
+
+  const body = $("integModalBody");
+  body.innerHTML = `<div class="hint" style="margin-bottom:8px">${integ.description} <b>v${integ.version}</b> · ${integ.checks.length} check(s)</div>`;
+
+  const cfg = await send({ type: "GET_INTEGRATION_CONFIG", id: integ.id });
+
+  const toggleWrap = document.createElement("label");
+  toggleWrap.style.cssText = "display:flex;align-items:center;gap:8px;margin:6px 0 10px";
+  integToggle = document.createElement("input");
+  integToggle.type = "checkbox";
+  integToggle.style.width = "auto";
+  integToggle.checked = !!cfg.enabled;
+  toggleWrap.appendChild(integToggle);
+  toggleWrap.appendChild(document.createTextNode("Enabled (shown in the overlay panel)"));
+  body.appendChild(toggleWrap);
+
+  const grid = document.createElement("div");
+  grid.className = "row";
+  for (const field of integ.configSchema) {
+    const cell = document.createElement("div");
+    const label = document.createElement("label");
+    label.textContent = field.label + (field.required ? " *" : "");
+    cell.appendChild(label);
+    const input = document.createElement("input");
+    input.type = field.type === "password" ? "password" : "text";
+    input.placeholder = field.placeholder || "";
+    input.value = cfg.config[field.key] ?? "";
+    integInputs[field.key] = input;
+    cell.appendChild(input);
+    if (field.help) {
+      const h = document.createElement("div");
+      h.className = "hint";
+      h.textContent = field.help;
+      cell.appendChild(h);
+    }
+    grid.appendChild(cell);
+  }
+  body.appendChild(grid);
+
+  const msg = document.createElement("div");
+  msg.className = "msg";
+  msg.id = "integModalMsg";
+  body.appendChild(msg);
+
+  $("integModal").classList.add("open");
+}
+
+async function saveIntegModal() {
+  const config = {};
+  for (const [k, input] of Object.entries(integInputs)) config[k] = input.value.trim();
+  await send({ type: "SET_INTEGRATION_CONFIG", id: modalInteg.id, enabled: integToggle.checked, config });
+}
+
+$("integModalClose").addEventListener("click", () => $("integModal").classList.remove("open"));
+$("integModal").addEventListener("click", (e) => { if (e.target === $("integModal")) $("integModal").classList.remove("open"); });
+$("integModalSave").addEventListener("click", async () => {
+  try {
+    await saveIntegModal();
+    flash("integModalMsg", "Saved.", true);
+    renderIntegrations();
+  } catch (e) { flash("integModalMsg", e.message, false); }
+});
+$("integModalTest").addEventListener("click", async () => {
+  try {
+    if (!integToggle.checked) integToggle.checked = true;
+    await saveIntegModal();
+    const r = await send({ type: "TEST_INTEGRATION", id: modalInteg.id });
+    flash("integModalMsg", r.summary, true);
+    renderIntegrations();
+  } catch (e) { flash("integModalMsg", e.message, false); }
+});
 
 renderIntegrations();

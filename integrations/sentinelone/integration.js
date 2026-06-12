@@ -90,6 +90,7 @@ function notLicensedOr(err, fallback) {
 export default {
   id: "sentinelone",
   name: "SentinelOne",
+  icon: "integrations/sentinelone/logo.svg",
   version: "1.0.0",
   author: "ControlMap PSA Bridge",
   description: "Pulls security posture from a SentinelOne tenant (agents, threats, exclusions, console governance) as compliance checks with evidence snapshots.",

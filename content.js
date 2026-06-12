@@ -221,8 +221,15 @@
     }
     for (const integ of enabled) {
       const box = el("div", { class: "icl" });
+      const nameWrap = el("div", { style: "display:flex;align-items:center;gap:8px" });
+      if (integ.icon) {
+        const logo = el("img", { src: chrome.runtime.getURL(integ.icon), alt: integ.name, style: "height:20px;max-width:110px;object-fit:contain" });
+        logo.addEventListener("error", () => logo.remove());
+        nameWrap.appendChild(logo);
+      }
+      nameWrap.appendChild(el("div", { class: "iname", text: integ.name }));
       const headRow = el("div", { style: "display:flex;justify-content:space-between;align-items:center" }, [
-        el("div", { class: "iname", text: integ.name }),
+        nameWrap,
         el("button", { class: "btn small", text: "Run all", onclick: async (e) => {
           e.target.disabled = true; e.target.textContent = "Running…";
           try { await send({ type: "RUN_ALL_CHECKS", id: integ.id }); renderPanel(); }

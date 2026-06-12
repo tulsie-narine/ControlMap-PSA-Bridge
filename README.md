@@ -60,7 +60,7 @@ Choose the destination:
 - **Create new evidence** — `POST /clients/{id}/evidences` (mapped to the current assessment question when used from a question page), or
 - **Add to existing evidence** — creates a **new evidence request** inside the chosen evidence (`POST /evidences/{id}/documents`) so recurring collections (quarterly incident reviews, monthly access-change pulls) accumulate under one evidence record.
 
-Either way the attached document is a JSON evidence package: collection metadata (source PSA, client, query, collector version, timestamp), summary stats (found/closed/open/weak), per-ticket fields (id, number, title, status, type, priority, created/closed dates, owner, description), ticket notes for the first 25 tickets, and a `sha256` integrity hash stamped into both the package and the evidence description.
+Each collection attaches **two documents to the same evidence request**: a formatted **PDF report** (summary, per-ticket details, notes, weak flags, integrity hash — rendered by a dependency-free PDF writer in `core/pdf.js`) for auditors, and a JSON evidence package as the machine-readable system of record: collection metadata (source PSA, client, query, collector version, timestamp), summary stats (found/closed/open/weak), per-ticket fields (id, number, title, status, type, priority, created/closed dates, owner, description), ticket notes for the first 25 tickets, and a `sha256` integrity hash stamped into both the package and the evidence description.
 
 ## Building your own integration
 

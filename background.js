@@ -10,6 +10,7 @@ import { getSettings, saveSettings, integrationConfig, saveLastRun } from "./cor
 import * as sp from "./core/scalepad.js";
 import { PSA_ADAPTERS, suggestPriority } from "./core/psa.js";
 import { INTEGRATIONS, getIntegration } from "./integrations/registry.js";
+import { buildTicketEvidencePdf } from "./core/pdf.js";
 
 // ---------- integration helpers ----------
 
@@ -261,10 +262,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         ].filter(Boolean);
         const description = summaryLines.join("\n");
         const fileName = `psa-tickets-${date}.json`;
+        // human-readable companion report
+        let extraFiles = [];
+        try {
+          extraFiles = [{ blob: buildTicketEvidencePdf(pkg), name: `psa-tickets-${date}.pdf` }];
+        } catch { /* PDF is best-effort; JSON remains the system of record */ }
 
         if (msg.target?.mode === "existing" && msg.target?.evidenceId) {
           const r = await sp.addEvidenceRequestWithDocument(settings, client.id, msg.target.evidenceId, {
-            snapshot: pkg, fileName, note: description,
+            snapshot: pkg, fileName, note: description, extraFiles,
           });
           return { mode: "existing", evidenceId: msg.target.evidenceId, evidenceRequestId: r.evidenceRequestId, stats, hash };
         }
@@ -274,6 +280,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           questionCodes: msg.questionCode ? [msg.questionCode] : [],
           snapshot: pkg,
           fileName,
+          extraFiles,
         });
         return { mode: "new", ...created, stats, hash };
       }

@@ -92,7 +92,7 @@ export async function getQuestion(settings, clientId, questionCode) {
  * Create evidence (optionally mapped to assessment questions), then upload a
  * JSON snapshot document. Returns {evidenceId, evidenceRequestId, documentId}.
  */
-export async function createEvidenceWithSnapshot(settings, clientId, { title, description, questionCodes = [], snapshot, fileName }) {
+export async function createEvidenceWithSnapshot(settings, clientId, { title, description, questionCodes = [], snapshot, fileName, extraFiles = [] }) {
   const payload = {
     title: String(title).slice(0, 250),
     description: String(description || "").slice(0, 4000),
@@ -103,17 +103,42 @@ export async function createEvidenceWithSnapshot(settings, clientId, { title, de
     method: "POST", body: JSON.stringify(payload),
   });
   const evidenceId = created?.id;
-  const out = { evidenceId, evidenceRequestId: created?.evidence_request_id, documentId: null };
-  if (evidenceId && snapshot) {
-    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+  const out = { evidenceId, evidenceRequestId: created?.evidence_request_id ?? null, documentId: null };
+  if (!evidenceId) return out;
+
+  const files = [];
+  if (snapshot) files.push({ blob: new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" }), name: fileName || `evidence-${Date.now()}.json` });
+  for (const f of extraFiles) if (f?.blob) files.push(f);
+
+  if (out.evidenceRequestId) {
+    // attach everything to the request auto-created with the evidence
+    for (const f of files) {
+      const up = await uploadRequestDocument(settings, clientId, out.evidenceRequestId, f.blob, f.name);
+      out.documentId = out.documentId ?? (up?.documents?.[0]?.document_id ?? null);
+    }
+  } else if (files.length) {
+    // fallback: this endpoint creates a request and attaches the first file
     const fd = new FormData();
-    fd.append("file", blob, fileName || `evidence-${Date.now()}.json`);
+    fd.append("file", files[0].blob, files[0].name);
     const up = await spFetch(settings, `/controlmap/v1/clients/${encodeURIComponent(clientId)}/evidences/${evidenceId}/documents`, {
       method: "POST", body: fd, multipart: true,
     });
+    out.evidenceRequestId = up?.evidence_request_id ?? null;
     out.documentId = up?.documents?.[0]?.document_id ?? null;
+    if (out.evidenceRequestId) {
+      for (const f of files.slice(1)) await uploadRequestDocument(settings, clientId, out.evidenceRequestId, f.blob, f.name);
+    }
   }
   return out;
+}
+
+/** Upload a document (≤10 MB) directly to an existing evidence request. */
+export async function uploadRequestDocument(settings, clientId, evidenceRequestId, blob, fileName) {
+  const fd = new FormData();
+  fd.append("file", blob, fileName || `document-${Date.now()}`);
+  return spFetch(settings, `/controlmap/v1/clients/${encodeURIComponent(clientId)}/evidence-requests/${evidenceRequestId}/documents`, {
+    method: "POST", body: fd, multipart: true,
+  });
 }
 
 export async function saveAnswer(settings, clientId, questionCode, answer) {
@@ -145,7 +170,7 @@ export async function listEvidences(settings, clientId) {
  * Add a NEW evidence request to an EXISTING evidence and attach a JSON package
  * as its document. Optionally PATCHes the created request with notes.
  */
-export async function addEvidenceRequestWithDocument(settings, clientId, evidenceId, { snapshot, fileName, note }) {
+export async function addEvidenceRequestWithDocument(settings, clientId, evidenceId, { snapshot, fileName, note, extraFiles = [] }) {
   const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
   const fd = new FormData();
   fd.append("file", blob, fileName || `evidence-${Date.now()}.json`);
@@ -153,6 +178,9 @@ export async function addEvidenceRequestWithDocument(settings, clientId, evidenc
     method: "POST", body: fd, multipart: true,
   });
   const evidenceRequestId = up?.evidence_request_id ?? null;
+  if (evidenceRequestId) {
+    for (const f of extraFiles) if (f?.blob) await uploadRequestDocument(settings, clientId, evidenceRequestId, f.blob, f.name);
+  }
   if (evidenceRequestId && note) {
     try {
       await spFetch(settings, `/controlmap/v1/clients/${encodeURIComponent(clientId)}/evidence-requests/${evidenceRequestId}`, {

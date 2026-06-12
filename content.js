@@ -139,6 +139,9 @@
       .check .cdet { font-size: 11px; color: #555c70; margin: 4px 0 0 0; padding-left: 16px; }
       .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
       .gear { border: none; background: none; cursor: pointer; color: #8a90a5; font-size: 15px; }
+      .settings-btn { border: 1px solid #d9d2ff; background: #f5f2ff; color: #7c5cff; font-size: 12px;
+                      font-weight: 700; padding: 5px 12px; border-radius: 8px; cursor: pointer; }
+      .settings-btn:hover { background: #7c5cff; color: #fff; border-color: #7c5cff; }
     `;
     shadow.appendChild(style);
 
@@ -149,8 +152,8 @@
       (panelContextLabel = el("div", { class: "ctx", text: "" })),
     ]);
     head.appendChild(titleWrap);
-    head.appendChild(el("div", {}, [
-      el("button", { class: "gear", text: "⚙", title: "Settings", onclick: () => send({ type: "OPEN_OPTIONS" }).catch(() => {}) }),
+    head.appendChild(el("div", { style: "display:flex;gap:8px;align-items:center" }, [
+      el("button", { class: "settings-btn", html: "&#9881;&#xFE0E; Settings", title: "Open settings", onclick: () => send({ type: "OPEN_OPTIONS" }).catch(() => {}) }),
       el("button", { class: "gear", text: "✕", title: "Close", onclick: () => togglePanel(false) }),
     ]));
     panel.appendChild(head);
@@ -230,9 +233,6 @@
 
     // --- integrations ---
     const enabled = data.integrations.filter((i) => i.enabled);
-    if (!enabled.length) {
-      panelBody.appendChild(el("div", { class: "status info", text: "No integrations enabled yet. Open Settings (⚙) to configure SentinelOne or add your own — see docs/BUILDING_INTEGRATIONS.md in the repo." }));
-    }
     for (const integ of enabled) {
       const box = el("div", { class: "icl" });
       const nameWrap = el("div", { style: "display:flex;align-items:center;gap:8px" });

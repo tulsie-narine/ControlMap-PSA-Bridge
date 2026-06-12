@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>ControlMap PSA Bridge — Settings</title>
+  <title>ControlMap Bridge — Settings</title>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
     body { margin: 0; background: #f4f5fa; color: #1c2030; }
@@ -31,7 +31,7 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>ControlMap PSA Bridge</h1>
+    <h1>ControlMap Bridge</h1>
 
     <div class="card">
       <h2>ScalePad / ControlMap API</h2>
@@ -47,6 +47,12 @@
       </select>
       <button class="btn ghost" id="testSp">Test connection</button>
       <div class="msg" id="spMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Integrations</h2>
+      <div class="hint">Compliance-data integrations surface in the on-page overlay panel. Each integration is a folder in <b>integrations/</b> — see docs/BUILDING_INTEGRATIONS.md to build your own.</div>
+      <div id="integrationsWrap"></div>
     </div>
 
     <div class="card">

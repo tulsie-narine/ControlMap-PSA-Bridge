@@ -1,51 +1,71 @@
-# ControlMap PSA Bridge (v0.2)
+# ControlMap Bridge
 
-Browser extension that adds a **Create Ticket** button to ControlMap action item panels and creates a pre-filled ticket in your PSA: **Autotask**, **ConnectWise Manage**, or **HaloPSA**. Chrome/Edge, Mac and Windows.
+Browser extension (Chrome/Edge, Mac + Windows) that overlays [ControlMap](https://app.ctrlmap.com) with:
 
-## How it works
-
-1. A content script watches `*.app.ctrlmap.com` for the "Update Action Item: AI-XX" sidebar and injects the button.
-2. The background worker resolves the tenant subdomain to a ScalePad client (manual Tenant mapping first, auto-probe fallback) and fetches the action item via the ScalePad API (`x-api-key`) — no page scraping.
-3. A modal opens pre-filled: title, composed description (weakness, corrective action, milestones, requirements, link back), and PSA-specific fields loaded live from the selected PSA. ControlMap priority is label-matched to the PSA priority list.
-4. Ticket is created via the PSA's API; the client → company choice is remembered per PSA.
-
-A `declarativeNetRequest` rule strips `Origin`/`Referer` headers on API calls (ScalePad rejects browser-origin requests with 403 "Invalid CORS request").
-
-## Install (unpacked)
+1. **PSA ticketing** — a *Create Ticket* button on action items that files pre-filled tickets in **Autotask**, **ConnectWise Manage**, or **HaloPSA**.
+2. **An open integration framework** — a Grammarly-style launcher on every ControlMap page opens a context-aware panel where integrations (SentinelOne first; Defender, Huntress, etc. welcome via PR) run compliance checks against your security stack, attach the results to ControlMap as **evidence with JSON snapshots**, and **propose assessment answers** (always human-confirmed).
 
 ```
 git clone https://github.com/tulsie-narine/ControlMap-PSA-Bridge.git
 ```
 
+## How it works
 
-Chrome/Edge → `chrome://extensions` → Developer mode → **Load unpacked** → select this folder. After updating a version, remove + re-load (manifest permission changes need it). Settings persist.
+Everything talks to documented APIs — no page scraping. The content script only reads context from the page (tenant subdomain, question code from the URL, action-item code from the panel title).
+
+- **ScalePad/ControlMap API** (`x-api-key`): fetch action items and questions; create evidences (`POST /clients/{id}/evidences` with question mappings), upload JSON snapshots as evidence documents, save answers (`PUT .../questions/{code}/answer`).
+- **Panel contexts**: on an assessment question page the panel ranks integration checks by keyword relevance to the question; with an action-item panel open it offers ticket creation; elsewhere it shows the integration dashboard.
+- **Propose-confirm**: a check result maps to a suggested answer (pass→Yes, warning→Partially, fail→No). Nothing is written to ControlMap until the user confirms.
+- A `declarativeNetRequest` rule strips `Origin`/`Referer` on API calls (ScalePad and most security APIs reject browser-origin requests).
+
+## Repository layout
+
+```
+manifest.json            MV3 manifest (module service worker)
+background.js            message router
+core/store.js            settings + migrations
+core/scalepad.js         ScalePad/ControlMap client (incl. evidence + answer writes)
+core/psa.js              PSA adapters (Autotask / ConnectWise / HaloPSA)
+integrations/registry.js integration registry — add yours here
+integrations/sentinelone SentinelOne integration (10 checks)
+content.js               launcher, panel, inline ticket button, ticket modal
+options.html/options.js  settings UI (ScalePad, PSA, integrations, tenant mappings)
+rules.json               Origin-strip DNR rule
+docs/BUILDING_INTEGRATIONS.md   integration developer guide
+```
+
+## Install (unpacked)
+
+Chrome/Edge → `chrome://extensions` → Developer mode → **Load unpacked** → select this folder. After version updates, remove + re-load (manifest changes need it). Settings persist.
 
 ## Configure
 
-**ScalePad API** — API key + region, Test connection.
+1. **ScalePad API** — API key + region → Test connection.
+2. **Integrations** — e.g. SentinelOne: tenant URL + service-user API token (read-only Viewer role; Settings → Users → Service Users in the S1 console), optional site IDs to scope per client, thresholds → Test → Enable.
+3. **PSA** — pick Autotask / ConnectWise / HaloPSA, add credentials, set ticket defaults (see per-PSA hints in the options page).
+4. **Tenant mappings** — map ControlMap subdomain → ScalePad client (→ optional PSA company). Manual mappings beat auto-detection.
 
-**PSA tab — pick one of:**
+## SentinelOne integration (v1 — 10 checks)
 
-- **Autotask** — API integration code, API username, secret (API-only user; zone auto-detected).
-- **ConnectWise Manage** — site (`api-na.myconnectwise.net` for NA cloud; eu/au variants; or your on-prem host), company ID, API Member public/private keys (System → Members → API Members), and a `clientId` registered free at developer.connectwise.com. Tickets need board + status + priority; statuses/types reload when you change board.
-- **HaloPSA** — base URL (`yourcompany.halopsa.com`), client ID + secret from Configuration → Integrations → HaloPSA API → Applications ("Client ID and Secret (Services)" auth; grant ticket read/edit and client read scopes). Ticket type is required; if your ticket type enforces extra required fields (category, impact, urgency) without defaults, creation may fail — pick a simpler type or set defaults in Halo.
+REST-only subset of the 37-check whitepaper catalog: coverage (S1-AM-01), stale agents (AM-02), server protection (AM-06), protect mode (EP-01), agent currency (EP-05), open threats vs SLA (TM-01), infected endpoints (TM-02), triage completeness (TM-04), exclusions hygiene (GV-01), API-token governance (GV-05). Each check stores a snapshot (capped samples) as the evidence document and cross-references CIS / NIST CSF / 800-171 / CMMC / ISO 27001 / SOC 2.
 
-Then **Test connection** and set **Ticket defaults** (loaded live from the PSA).
+Licensed-module endpoints degrade to **not-licensed** rather than fail. GraphQL surfaces (XSPM vulnerabilities/misconfigurations, unified alerts) are phase 2 — schemas need live-tenant validation.
 
-**Tenant mappings** — map ControlMap subdomain → ScalePad client (→ optionally PSA company). Manual mappings win over auto-detection.
+## Building your own integration
 
-Credentials live in `chrome.storage.local` on each technician's machine only.
+See **docs/BUILDING_INTEGRATIONS.md**. Short version: one folder, one `integration.js` exporting `{ id, name, configSchema, test, checks[] }`, one import line in `integrations/registry.js`, plus host permissions. The options form, panel UI, evidence pipeline, and answer flow come free.
 
 ## Notes & limitations
 
-- Button appears only on the **Update** panel (a new unsaved action item has no code yet).
-- On-prem ConnectWise or custom Halo domains: add your host to `host_permissions` in manifest.json and `requestDomains` in rules.json, then reload the extension.
-- ConnectWise ticket summary is truncated to 100 chars (CW limit); full title remains in the description.
-- Priority label matching is heuristic — verify in the modal.
-- PSA adapters live in `background.js` (`autotaskAdapter`, `connectwiseAdapter`, `haloAdapter`); each implements test / getFields / searchCompanies / createTicket.
+- Inline ticket button appears only on the *Update Action Item* panel (new unsaved items have no code).
+- MV3 forbids remote code, so integrations ship with the extension — contribute via PR or maintain a fork.
+- Safari is not supported (Safari doesn't apply `modifyHeaders` DNR rules to extension-initiated requests, which breaks the Origin-strip workaround). Firefox port is feasible.
+- Check evaluation caps fleet pulls at 1,000 records per check; evidence samples at 200 records.
+- On-prem ConnectWise / custom Halo / custom S1 domains: add the host to `manifest.json` + `rules.json`.
 
-## Roadmap ideas
+## Roadmap
 
-- Write-back to ControlMap (status → In Progress + ticket number note) after creation.
-- Per-tenant default PSA (route different clients to different PSAs).
-- Firefox support via webextension-polyfill.
+- More integrations: Microsoft Defender, Huntress, backup posture (Backup Radar), M365 secure score.
+- Write-back to action items (ticket number note, status → In Progress).
+- Scheduled check runs with drift alerts.
+- Full 37-check SentinelOne catalog incl. GraphQL surfaces.

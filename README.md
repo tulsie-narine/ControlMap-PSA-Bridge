@@ -9,6 +9,8 @@ Browser extension (Chrome/Edge, Mac + Windows) that overlays [ControlMap](https:
 git clone https://github.com/tulsie-narine/ControlMap-PSA-Bridge.git
 ```
 
+![ControlMap Bridge panel](https://i.ibb.co/nsdNTsM9/Screenshot-2026-06-16-at-1-34-52-PM.png)
+
 ## How it works
 
 Everything talks to documented APIs — no page scraping. The content script only reads context from the page (tenant subdomain, question code from the URL, action-item code from the panel title).

@@ -169,6 +169,16 @@ async function handleMessage(msg) {
       try { client = await sp.resolveTenant(settings, msg.subdomain); }
       catch (e) { clientError = e.message; }
 
+      // Only show the PSA ticket section when the active PSA has credentials filled in
+      const psaConfigured = (() => {
+        switch (settings.psa || "autotask") {
+          case "autotask": { const a = settings.autotask || {}; return !!(a.integrationCode && a.userName && a.secret); }
+          case "connectwise": { const c = settings.connectwise || {}; return !!(c.siteUrl && c.companyId && c.publicKey && c.privateKey); }
+          case "halo": { const h = settings.halo || {}; return !!(h.baseUrl && h.clientId && h.clientSecret); }
+          default: return false;
+        }
+      })();
+
       let question = null;
       if (client && msg.questionCode) {
         try { question = await sp.getQuestion(settings, client.id, msg.questionCode); }
@@ -181,8 +191,9 @@ async function handleMessage(msg) {
       return {
         client,
         clientError,
-        psa:     settings.psa || "autotask",
-        psaName: psa.name,
+        psa:          settings.psa || "autotask",
+        psaName:      psa.name,
+        psaConfigured,
         question: question
           ? { code: msg.questionCode, text: questionText.slice(0, 500) }
           : (msg.questionCode ? { code: msg.questionCode, text: "" } : null),

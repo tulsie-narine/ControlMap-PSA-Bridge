@@ -366,8 +366,8 @@
       panelBody.appendChild(el("div", { class: "hint", text: "Checks below are ranked by relevance to this question. Results are proposed — nothing is written to ControlMap without your confirmation." }));
     }
 
-    // --- PSA ticket evidence card (collapsed by default) ---
-    if (data.client) {
+    // --- PSA ticket evidence card (only when PSA is configured) ---
+    if (data.client && data.psaConfigured) {
       const PSA_ICONS = { autotask: "assets/autotask.svg", connectwise: "assets/connectwise.svg", halo: "assets/halopsa.svg" };
       const psaIcon = PSA_ICONS[data.psa] || null;
       const psaName = data.psaName || "PSA";
@@ -402,8 +402,8 @@
       panelBody.appendChild(teBox);
     }
 
-    // --- integrations (collapsed by default if there are multiple, expanded if only one) ---
-    const enabled = data.integrations.filter((i) => i.enabled);
+    // --- integrations (only show enabled + fully configured ones) ---
+    const enabled = data.integrations.filter((i) => i.enabled && i.configured);
     for (const integ of enabled) {
       const box = el("div", { class: "icl" }); // start expanded
 

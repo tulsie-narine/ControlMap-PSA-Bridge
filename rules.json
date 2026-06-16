@@ -26,7 +26,10 @@
         "myconnectwise.net",
         "halopsa.com",
         "haloitsm.com",
-        "sentinelone.net"
+        "sentinelone.net",
+        "login.microsoftonline.com",
+        "graph.microsoft.com",
+        "api.securitycenter.microsoft.com"
       ],
       "resourceTypes": [
         "xmlhttprequest"

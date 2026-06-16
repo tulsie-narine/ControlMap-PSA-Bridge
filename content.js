@@ -123,21 +123,83 @@
              box-shadow: 0 6px 20px rgba(80,60,220,.45); display: flex; align-items: center; justify-content: center; }
       .fab:hover { transform: scale(1.06); }
       .fab svg { width: 24px; height: 24px; }
-      .panel { position: fixed; right: 0; bottom: 58px; width: 380px; max-height: min(70vh, 640px);
+
+      /* ── Panel shell ── */
+      .panel { position: fixed; right: 0; bottom: 58px; width: 760px; max-height: min(87.5vh, 800px);
                display: none; flex-direction: column; overflow: hidden; }
       .panel.open { display: flex; }
-      .phead { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e6e8f0; }
+
+      /* ── Panel header ── */
+      .phead { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px;
+               border-bottom: 1px solid #e6e8f0; background: #fafbff; flex-shrink: 0; }
       .phead .title { font-size: 14px; font-weight: 700; }
       .phead .ctx { font-size: 11px; color: #8a90a5; }
-      .pbody { padding: 12px 16px; overflow-y: auto; }
-      .icl { border: 1px solid #e6e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
-      .icl .iname { font-weight: 700; font-size: 13px; }
-      .check { border-top: 1px solid #eef0f6; padding: 8px 0; }
-      .check .ct { font-size: 12.5px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-      .check .cd { font-size: 11px; color: #8a90a5; margin-top: 2px; }
-      .check .cres { font-size: 12px; margin-top: 6px; }
-      .check .cdet { font-size: 11px; color: #555c70; margin: 4px 0 0 0; padding-left: 16px; }
+
+      /* ── Panel body ── */
+      .pbody { padding: 14px 16px; overflow-y: auto; flex: 1; }
+
+      /* ── Integration card ── */
+      .icl { border: 1px solid #e6e8f0; border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
+      .ich { display: flex; align-items: center; justify-content: space-between; padding: 11px 16px;
+             background: linear-gradient(to right, #f7f8fc, #f3f4fa); border-bottom: 1px solid #e6e8f0; }
+      .iname { font-weight: 700; font-size: 13px; color: #1c2030; }
+
+      /* ── Dashboard two-column ── */
+      .dash { display: flex; min-height: 0; }
+
+      /* Left: score column */
+      .score-col { width: 200px; flex-shrink: 0; padding: 18px 14px 14px;
+                   display: flex; flex-direction: column; align-items: center;
+                   border-right: 1px solid #eef0f6; background: #fafbff; }
+      .score-label { font-size: 10px; font-weight: 700; color: #8a90a5; text-transform: uppercase;
+                     letter-spacing: .06em; margin-bottom: 12px; }
+      .sleg { width: 100%; margin-top: 14px; }
+      .sleg-row { display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 3px 0; color: #3d4460; }
+      .sleg-sq { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+      .sleg-count { margin-left: auto; font-weight: 700; font-size: 11px; color: #1c2030; }
+
+      /* Right: check accordion */
+      .check-col { flex: 1; overflow-y: auto; }
+
+      /* Accordion row */
+      .crow { border-bottom: 1px solid #f0f1f8; }
+      .crow:last-child { border-bottom: none; }
+      .ctop { display: flex; align-items: center; gap: 9px; padding: 10px 14px; cursor: pointer; transition: background .12s; user-select: none; }
+      .ctop:hover { background: #f6f7fc; }
+      .crow.expanded .ctop { background: #f3f4fa; }
+      .cexp { padding: 6px 14px 14px 32px; display: none; border-top: 1px solid #eef0f6; background: #fafbff; }
+      .crow.expanded .cexp { display: block; }
+      .carrow { margin-left: auto; color: #c0c6da; font-size: 9px; flex-shrink: 0; transition: transform .15s; }
+      .crow.expanded .carrow { transform: rotate(180deg); }
+
+      /* Status dot */
+      .sdot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+      .sdot.pass { background: #059669; }
+      .sdot.fail { background: #dc2626; }
+      .sdot.warning { background: #d97706; }
+      .sdot.not-licensed { background: #c8cfe0; }
+      .sdot.error { background: #f97316; }
+      .sdot.pending { background: #dde1ef; }
+
+      /* Check title / id */
+      .ctitle { font-size: 12.5px; font-weight: 600; color: #1c2030; flex: 1; min-width: 0;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .cid { font-size: 10px; color: #aab0c4; flex-shrink: 0; }
+
+      /* Group headers */
+      .cgroup-hdr { display: flex; align-items: center; gap: 6px; padding: 6px 14px 4px;
+                    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+                    color: #8a90a5; background: #f7f8fc; border-bottom: 1px solid #eef0f6;
+                    border-top: 1px solid #eef0f6; position: sticky; top: 0; z-index: 1; }
+      .cgroup-hdr:first-child { border-top: none; }
+      .cgroup-hdr .gh-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+      .cgroup-hdr .gh-count { margin-left: auto; font-size: 10px; color: #aab0c4; }
+
+      /* Expanded content */
+      .cres { font-size: 12px; margin-bottom: 4px; }
+      .cdet { font-size: 11px; color: #555c70; margin: 4px 0 0 0; padding-left: 16px; }
       .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
       .gear { border: none; background: none; cursor: pointer; color: #8a90a5; font-size: 15px; }
       .settings-btn { border: 1px solid #d9d2ff; background: #f5f2ff; color: #7c5cff; font-size: 12px;
                       font-weight: 700; padding: 5px 12px; border-radius: 8px; cursor: pointer; }
@@ -178,11 +240,89 @@
     return `<span class="chip ${status}">${status.toUpperCase()}</span>`;
   }
 
+  // ===================== donut chart helpers =====================
+
+  function polarToCartesian(cx, cy, r, angleDeg) {
+    const rad = (angleDeg - 90) * Math.PI / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+
+  function donutPath(cx, cy, R, ir, sa, ea) {
+    if (ea - sa >= 360) ea = sa + 359.9999;
+    const o1 = polarToCartesian(cx, cy, R, sa);
+    const o2 = polarToCartesian(cx, cy, R, ea);
+    const i1 = polarToCartesian(cx, cy, ir, ea);
+    const i2 = polarToCartesian(cx, cy, ir, sa);
+    const lg = (ea - sa) > 180 ? 1 : 0;
+    return `M${o1.x.toFixed(2)} ${o1.y.toFixed(2)} A${R} ${R} 0 ${lg} 1 ${o2.x.toFixed(2)} ${o2.y.toFixed(2)} L${i1.x.toFixed(2)} ${i1.y.toFixed(2)} A${ir} ${ir} 0 ${lg} 0 ${i2.x.toFixed(2)} ${i2.y.toFixed(2)}Z`;
+  }
+
+  function buildDonutHTML(checks) {
+    const palette = [
+      { key: "pass",        color: "#059669", label: "Pass"        },
+      { key: "fail",        color: "#dc2626", label: "Fail"        },
+      { key: "warning",     color: "#d97706", label: "Warning"     },
+      { key: "not-licensed",color: "#c8cfe0", label: "Not licensed"},
+      { key: "error",       color: "#f97316", label: "Error"       },
+      { key: "pending",     color: "#e4e7f3", label: "Not run"     },
+    ];
+
+    const counts = { pass: 0, fail: 0, warning: 0, "not-licensed": 0, error: 0, pending: 0 };
+    for (const c of checks) {
+      const s = c.lastRun?.result?.status;
+      if (s && s in counts) counts[s]++;
+      else counts.pending++;
+    }
+
+    const total = checks.length || 1;
+    const runnable = total - counts["not-licensed"] - counts.pending;
+    const pct = runnable > 0 ? Math.round((counts.pass / runnable) * 100) : null;
+
+    const CX = 60, CY = 60, R = 52, IR = 35;
+    let angle = 0;
+    let paths = "";
+    for (const seg of palette) {
+      const n = counts[seg.key] || 0;
+      if (!n) continue;
+      const span = (n / total) * 360;
+      paths += `<path d="${donutPath(CX, CY, R, IR, angle, angle + span)}" fill="${seg.color}" stroke="none"/>`;
+      angle += span;
+    }
+    if (!paths) {
+      paths = `<circle cx="${CX}" cy="${CY}" r="${(R + IR) / 2}" fill="none" stroke="#e4e7f3" stroke-width="${R - IR}"/>`;
+    }
+
+    const scoreText = pct !== null ? `${pct}%` : "—";
+    const subText   = pct !== null ? `${counts.pass} of ${runnable}` : "not run yet";
+
+    let legend = "";
+    for (const seg of palette) {
+      const n = counts[seg.key] || 0;
+      if (!n) continue;
+      legend += `<div class="sleg-row"><span class="sleg-sq" style="background:${seg.color}"></span>${seg.label}<span class="sleg-count">${n}</span></div>`;
+    }
+
+    return `
+      <div class="score-label">Check Results</div>
+      <svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="${CX}" cy="${CY}" r="${(R + IR) / 2}" fill="none" stroke="#eef0f6" stroke-width="${R - IR}"/>
+        ${paths}
+        <text x="${CX}" y="${CY - 2}" text-anchor="middle" font-size="20" font-weight="700" fill="#1c2030"
+              font-family="-apple-system,Segoe UI,Roboto,sans-serif">${scoreText}</text>
+        <text x="${CX}" y="${CY + 15}" text-anchor="middle" font-size="9.5" fill="#8a90a5"
+              font-family="-apple-system,Segoe UI,Roboto,sans-serif">${subText}</text>
+      </svg>
+      <div class="sleg">${legend}</div>
+    `;
+  }
+
+  // ===================== panel rendering =====================
+
   async function renderPanel() {
     const ctx = detectContext();
     panelContextLabel.textContent =
-      ctx.kind === "question" ? `Question context — ${ctx.questionCode}` :
-      ctx.kind === "action-item" ? `Action item — ${ctx.code}` : "Overview";
+      ctx.kind === "question"    ? `Question context — ${ctx.questionCode}` :
+      ctx.kind === "action-item" ? `Action item — ${ctx.code}`              : "Overview";
     panelBody.innerHTML = "";
     panelBody.appendChild(el("div", { class: "status info", text: "Loading…" }));
 
@@ -235,6 +375,8 @@
     const enabled = data.integrations.filter((i) => i.enabled);
     for (const integ of enabled) {
       const box = el("div", { class: "icl" });
+
+      // ── Integration header ──
       const nameWrap = el("div", { style: "display:flex;align-items:center;gap:8px" });
       if (integ.icon) {
         const logo = el("img", { src: chrome.runtime.getURL(integ.icon), alt: integ.name, style: "height:20px;max-width:110px;object-fit:contain" });
@@ -242,7 +384,7 @@
         nameWrap.appendChild(logo);
       }
       nameWrap.appendChild(el("div", { class: "iname", text: integ.name }));
-      const headRow = el("div", { style: "display:flex;justify-content:space-between;align-items:center" }, [
+      const ich = el("div", { class: "ich" }, [
         nameWrap,
         el("button", { class: "btn small", text: "Run all", onclick: async (e) => {
           e.target.disabled = true; e.target.textContent = "Running…";
@@ -250,24 +392,91 @@
           catch (err) { e.target.textContent = "Failed"; }
         }}),
       ]);
-      box.appendChild(headRow);
+      box.appendChild(ich);
 
-      const checks = (ctx.kind === "question") ? integ.checks.filter((c) => c.score > 0).concat(integ.checks.filter((c) => c.score === 0)).slice(0, 8) : integ.checks;
-      for (const c of checks) box.appendChild(renderCheck(integ, c, ctx));
+      // ── Dashboard: two-column layout ──
+      const dash = el("div", { class: "dash" });
+
+      const checks = (ctx.kind === "question")
+        ? integ.checks.filter((c) => c.score > 0).concat(integ.checks.filter((c) => c.score === 0)).slice(0, 8)
+        : integ.checks;
+
+      // Left: donut chart
+      const scoreCol = el("div", { class: "score-col" });
+      scoreCol.innerHTML = buildDonutHTML(checks);
+      dash.appendChild(scoreCol);
+
+      // Right: accordion check list — grouped by status
+      const checkCol = el("div", { class: "check-col" });
+      const groups = [
+        { key: "pass",        label: "Pass",        color: "#059669" },
+        { key: "warning",     label: "Warning",     color: "#d97706" },
+        { key: "fail",        label: "Fail",        color: "#dc2626" },
+        { key: "not-licensed",label: "Not Licensed",color: "#c8cfe0" },
+        { key: "error",       label: "Error",       color: "#f97316" },
+        { key: "pending",     label: "Not Run",     color: "#dde1ef" },
+      ];
+      const buckets = Object.fromEntries(groups.map((g) => [g.key, []]));
+      for (const c of checks) {
+        const s = c.lastRun?.result?.status || "pending";
+        (buckets[s] || buckets["pending"]).push(c);
+      }
+      for (const g of groups) {
+        const items = buckets[g.key];
+        if (!items.length) continue;
+        const hdr = el("div", { class: "cgroup-hdr" });
+        hdr.innerHTML = `<span class="gh-dot" style="background:${g.color}"></span>${g.label}<span class="gh-count">${items.length}</span>`;
+        checkCol.appendChild(hdr);
+        for (const c of items) checkCol.appendChild(renderCheck(integ, c, ctx));
+      }
+      dash.appendChild(checkCol);
+
+      box.appendChild(dash);
       panelBody.appendChild(box);
     }
   }
 
+  // ===================== accordion check row =====================
+
   function renderCheck(integ, c, ctx) {
-    const row = el("div", { class: "check" });
+    const row = el("div", { class: "crow" });
     const last = c.lastRun;
-    const title = el("div", { class: "ct" });
-    title.innerHTML = `<span>${c.title}${ctx.kind === "question" && c.score > 0 ? " ★" : ""}</span><span>${last ? chip(last.result.status) : ""}</span>`;
-    row.appendChild(title);
-    row.appendChild(el("div", { class: "cd", text: c.id + " · " + (c.frameworks || []).slice(0, 3).join(" · ") }));
+    const status = last?.result?.status || "pending";
+
+    // ── Top bar (always visible) ──
+    const top = el("div", { class: "ctop" });
+    const dotEl    = el("span", { class: `sdot ${status}` });
+    const titleEl  = el("span", { class: "ctitle" });
+    titleEl.textContent = c.title + (ctx.kind === "question" && c.score > 0 ? " ★" : "");
+    const idEl     = el("span", { class: "cid", text: c.id });
+    const chipEl   = el("span", { class: `chip ${status}` });
+    chipEl.textContent = status !== "pending" ? status.toUpperCase() : "";
+    const arrowEl  = el("span", { class: "carrow", text: "▼" });
+
+    top.appendChild(dotEl);
+    top.appendChild(titleEl);
+    top.appendChild(idEl);
+    if (status !== "pending") top.appendChild(chipEl);
+    top.appendChild(arrowEl);
+
+    top.addEventListener("click", () => row.classList.toggle("expanded"));
+    row.appendChild(top);
+
+    // ── Expanded body ──
+    const exp = el("div", { class: "cexp" });
+    if (c.frameworks?.length) {
+      exp.appendChild(el("div", { style: "font-size:10px;color:#aab0c4;margin-bottom:6px", text: c.frameworks.slice(0, 4).join(" · ") }));
+    }
 
     const resBox = el("div");
-    row.appendChild(resBox);
+    exp.appendChild(resBox);
+
+    function updateTopStatus(s) {
+      dotEl.className = `sdot ${s}`;
+      chipEl.className = `chip ${s}`;
+      chipEl.textContent = s.toUpperCase();
+      if (!top.contains(chipEl)) top.insertBefore(chipEl, arrowEl);
+    }
 
     function showResult(r, ranAt) {
       resBox.innerHTML = "";
@@ -291,19 +500,22 @@
 
     if (last) showResult(last.result, last.ranAt);
 
-    const runBtn = el("button", { class: "btn small", text: last ? "Re-run" : "Run", onclick: async () => {
+    const runBtn = el("button", { class: "btn small", text: last ? "Re-run" : "Run", onclick: async (e) => {
+      e.stopPropagation();
       runBtn.disabled = true; runBtn.textContent = "Running…";
       try {
         const { result } = await send({ type: "RUN_CHECK", id: integ.id, checkId: c.id });
         showResult(result, new Date().toISOString());
+        updateTopStatus(result.status);
       } catch (err) {
         resBox.innerHTML = "";
         resBox.appendChild(el("div", { class: "status err", text: err.message }));
       }
       runBtn.disabled = false; runBtn.textContent = "Re-run";
     }});
-    const runWrap = el("div", { class: "actions" }, [runBtn]);
-    row.appendChild(runWrap);
+
+    exp.appendChild(el("div", { class: "actions", style: "margin-top:8px" }, [runBtn]));
+    row.appendChild(exp);
     return row;
   }
 

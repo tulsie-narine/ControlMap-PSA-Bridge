@@ -17,7 +17,10 @@
     "https://*.myconnectwise.net/*",
     "https://*.halopsa.com/*",
     "https://*.haloitsm.com/*",
-    "https://*.sentinelone.net/*"
+    "https://*.sentinelone.net/*",
+    "https://login.microsoftonline.com/*",
+    "https://graph.microsoft.com/*",
+    "https://api.securitycenter.microsoft.com/*"
   ],
   "declarative_net_request": {
     "rule_resources": [

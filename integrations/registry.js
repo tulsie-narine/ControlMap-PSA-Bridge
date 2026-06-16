@@ -6,9 +6,11 @@
  */
 
 import sentinelone from "./sentinelone/integration.js";
+import defender from "./defender/integration.js";
 
 export const INTEGRATIONS = [
   sentinelone,
+  defender,
 ];
 
 export function getIntegration(id) {

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Shield background -->
+  <path d="M24 3L6 10v12c0 10.5 7.7 20.3 18 22.9C35.3 42.3 42 32.5 42 22V10L24 3z" fill="#0078D4"/>
+  <!-- Inner shield highlight -->
+  <path d="M24 6.5L9 12.7V22c0 9 6.6 17.4 15 19.7V6.5z" fill="#50A0DC" opacity="0.4"/>
+  <!-- Windows logo mark (4 squares) -->
+  <rect x="15" y="15" width="7.5" height="7.5" rx="1" fill="white"/>
+  <rect x="24.5" y="15" width="7.5" height="7.5" rx="1" fill="white"/>
+  <rect x="15" y="24.5" width="7.5" height="7.5" rx="1" fill="white"/>
+  <rect x="24.5" y="24.5" width="7.5" height="7.5" rx="1" fill="white"/>
+</svg>

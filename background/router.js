@@ -181,6 +181,8 @@ async function handleMessage(msg) {
       return {
         client,
         clientError,
+        psa:     settings.psa || "autotask",
+        psaName: psa.name,
         question: question
           ? { code: msg.questionCode, text: questionText.slice(0, 500) }
           : (msg.questionCode ? { code: msg.questionCode, text: "" } : null),

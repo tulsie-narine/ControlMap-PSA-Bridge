@@ -186,6 +186,15 @@
                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .cid { font-size: 10px; color: #aab0c4; flex-shrink: 0; }
 
+      /* Collapsible integration / section cards */
+      .ich { cursor: pointer; user-select: none; }
+      .ich:hover { background: linear-gradient(to right, #eff0f7, #ebecf5); }
+      .toggle-arrow { color: #c0c6da; font-size: 10px; margin-left: 6px; flex-shrink: 0;
+                      transition: transform .18s; display: inline-block; }
+      .icl.collapsed .toggle-arrow { transform: rotate(-90deg); }
+      .icl.collapsed .dash { display: none; }
+      .icl.collapsed .psa-body { display: none; }
+
       /* Group headers */
       .cgroup-hdr { display: flex; align-items: center; gap: 6px; padding: 6px 14px 4px;
                     font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
@@ -357,41 +366,69 @@
       panelBody.appendChild(el("div", { class: "hint", text: "Checks below are ranked by relevance to this question. Results are proposed — nothing is written to ControlMap without your confirmation." }));
     }
 
-    // --- ticket evidence collection ---
+    // --- PSA ticket evidence card (collapsed by default) ---
     if (data.client) {
-      const teBtn = el("button", { class: "btn", text: "▸ Collect tickets as evidence", style: "margin:8px 0;width:100%;text-align:left" });
-      const teWrap = el("div", { style: "display:none" });
-      teBtn.addEventListener("click", () => {
-        const open = teWrap.style.display !== "none";
-        teWrap.style.display = open ? "none" : "block";
-        teBtn.textContent = (open ? "▸" : "▾") + " Collect tickets as evidence";
-        if (!open && !teWrap._built) { teWrap._built = true; buildTicketEvidenceSection(teWrap, ctx); }
+      const PSA_ICONS = { autotask: "assets/autotask.svg", connectwise: "assets/connectwise.svg", halo: "assets/halopsa.svg" };
+      const psaIcon = PSA_ICONS[data.psa] || null;
+      const psaName = data.psaName || "PSA";
+
+      const teBox = el("div", { class: "icl collapsed" });
+
+      // header
+      const teNameWrap = el("div", { style: "display:flex;align-items:center;gap:8px;flex:1;min-width:0" });
+      if (psaIcon) {
+        const psaLogo = el("img", { src: chrome.runtime.getURL(psaIcon), alt: psaName, style: "height:20px;max-width:110px;object-fit:contain" });
+        psaLogo.addEventListener("error", () => psaLogo.remove());
+        teNameWrap.appendChild(psaLogo);
+      }
+      teNameWrap.appendChild(el("div", { class: "iname", text: psaName }));
+      teNameWrap.appendChild(el("div", { style: "font-size:11px;color:#8a90a5;margin-left:4px", text: "Ticket evidence" }));
+
+      const teArrow = el("span", { class: "toggle-arrow", text: "▼" });
+      const teIch = el("div", { class: "ich", style: "display:flex;align-items:center" }, [teNameWrap, teArrow]);
+      teBox.appendChild(teIch);
+
+      // body (lazy-built on first expand)
+      const teBody = el("div", { class: "psa-body", style: "padding:12px 14px" });
+      let teBuilt = false;
+      teIch.addEventListener("click", () => {
+        teBox.classList.toggle("collapsed");
+        if (!teBox.classList.contains("collapsed") && !teBuilt) {
+          teBuilt = true;
+          buildTicketEvidenceSection(teBody, ctx);
+        }
       });
-      panelBody.appendChild(teBtn);
-      panelBody.appendChild(teWrap);
+      teBox.appendChild(teBody);
+      panelBody.appendChild(teBox);
     }
 
-    // --- integrations ---
+    // --- integrations (collapsed by default if there are multiple, expanded if only one) ---
     const enabled = data.integrations.filter((i) => i.enabled);
     for (const integ of enabled) {
-      const box = el("div", { class: "icl" });
+      const box = el("div", { class: "icl" }); // start expanded
 
-      // ── Integration header ──
-      const nameWrap = el("div", { style: "display:flex;align-items:center;gap:8px" });
+      // ── Integration header (clickable to collapse) ──
+      const nameWrap = el("div", { style: "display:flex;align-items:center;gap:8px;flex:1;min-width:0" });
       if (integ.icon) {
         const logo = el("img", { src: chrome.runtime.getURL(integ.icon), alt: integ.name, style: "height:20px;max-width:110px;object-fit:contain" });
         logo.addEventListener("error", () => logo.remove());
         nameWrap.appendChild(logo);
       }
       nameWrap.appendChild(el("div", { class: "iname", text: integ.name }));
-      const ich = el("div", { class: "ich" }, [
-        nameWrap,
-        el("button", { class: "btn small", text: "Run all", onclick: async (e) => {
-          e.target.disabled = true; e.target.textContent = "Running…";
-          try { await send({ type: "RUN_ALL_CHECKS", id: integ.id }); renderPanel(); }
-          catch (err) { e.target.textContent = "Failed"; }
-        }}),
+      const toggleArrow = el("span", { class: "toggle-arrow", text: "▼" });
+      const runAllBtn = el("button", { class: "btn small", text: "Run all", onclick: async (e) => {
+        e.stopPropagation();
+        e.target.disabled = true; e.target.textContent = "Running…";
+        try { await send({ type: "RUN_ALL_CHECKS", id: integ.id }); renderPanel(); }
+        catch (err) { e.target.textContent = "Failed"; }
+      }});
+      const ich = el("div", { class: "ich", style: "display:flex;align-items:center;gap:8px" }, [
+        nameWrap, runAllBtn, toggleArrow,
       ]);
+      ich.addEventListener("click", (e) => {
+        if (e.target === runAllBtn || runAllBtn.contains(e.target)) return;
+        box.classList.toggle("collapsed");
+      });
       box.appendChild(ich);
 
       // ── Dashboard: two-column layout ──
@@ -548,8 +585,7 @@
 
   async function buildTicketEvidenceSection(wrap, ctx) {
     wrap.innerHTML = "";
-    const box = el("div", { class: "icl" });
-    wrap.appendChild(box);
+    const box = wrap; // content renders directly into the passed container
     box.appendChild(el("div", { class: "hint", text: "Filter PSA tickets for this client and attach them to ControlMap as an evidence package (JSON, SHA-256 stamped). Weak tickets (no close date / description) are flagged." }));
 
     // --- filters ---

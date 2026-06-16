@@ -108,7 +108,7 @@
 
   // ===================== launcher + panel =====================
 
-  let launcherHost = null, panelOpen = false, panelBody = null, panelContextLabel = null;
+  let launcherHost = null, panelOpen = false, panelBody = null, panelContextLabel = null, panelClientBar = null;
 
   function buildLauncher() {
     if (launcherHost || !subdomain()) return;
@@ -213,6 +213,21 @@
       .settings-btn { border: 1px solid #d9d2ff; background: #f5f2ff; color: #7c5cff; font-size: 12px;
                       font-weight: 700; padding: 5px 12px; border-radius: 8px; cursor: pointer; }
       .settings-btn:hover { background: #7c5cff; color: #fff; border-color: #7c5cff; }
+
+      /* ── Active client bar ── */
+      .pclient { display: none; align-items: center; gap: 10px; padding: 8px 18px;
+                 background: linear-gradient(to right, #f0eeff, #eef1ff);
+                 border-bottom: 1px solid #ddd7ff; flex-shrink: 0; }
+      .pclient.show { display: flex; }
+      .pclient-icon { width: 28px; height: 28px; border-radius: 8px; background: #7c5cff;
+                      display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+      .pclient-icon svg { width: 15px; height: 15px; }
+      .pclient-label { font-size: 10px; font-weight: 600; text-transform: uppercase;
+                       letter-spacing: .07em; color: #9b88e0; line-height: 1; }
+      .pclient-name { font-size: 13px; font-weight: 800; color: #3a2880; line-height: 1.2; margin-top: 1px; }
+      .pclient-pill { margin-left: auto; font-size: 10px; font-weight: 700; color: #7c5cff;
+                      background: #ede9ff; border: 1px solid #c9bfff; border-radius: 20px;
+                      padding: 2px 9px; white-space: nowrap; }
     `;
     shadow.appendChild(style);
 
@@ -228,6 +243,15 @@
       el("button", { class: "gear", text: "✕", title: "Close", onclick: () => togglePanel(false) }),
     ]));
     panel.appendChild(head);
+    panelClientBar = el("div", { class: "pclient" }, [
+      el("div", { class: "pclient-icon", html: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>' }),
+      el("div", {}, [
+        el("div", { class: "pclient-label", text: "Active client" }),
+        el("div", { class: "pclient-name", text: "" }),
+      ]),
+      el("span", { class: "pclient-pill", text: "Focus" }),
+    ]);
+    panel.appendChild(panelClientBar);
     panelBody = el("div", { class: "pbody" });
     panel.appendChild(panelBody);
 
@@ -347,8 +371,16 @@
 
     if (data.clientError) {
       panelBody.appendChild(el("div", { class: "status err", text: data.clientError }));
-    } else if (data.client) {
-      panelBody.appendChild(el("div", { class: "hint", text: `Client: ${data.client.name}` }));
+    }
+    // Update client bar
+    if (panelClientBar) {
+      if (data.client) {
+        const nameEl = panelClientBar.querySelector(".pclient-name");
+        if (nameEl) nameEl.textContent = data.client.name || "";
+        panelClientBar.classList.add("show");
+      } else {
+        panelClientBar.classList.remove("show");
+      }
     }
 
     // --- action item context: ticket shortcut ---

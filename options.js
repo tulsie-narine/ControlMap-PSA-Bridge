@@ -436,12 +436,69 @@ async function openIntegModal(integ) {
     const label = document.createElement("label");
     label.textContent = field.label + (field.required ? " *" : "");
     cell.appendChild(label);
-    const input = document.createElement("input");
-    input.type = field.type === "password" ? "password" : "text";
-    input.placeholder = field.placeholder || "";
-    input.value = cfg.config[field.key] ?? "";
-    integInputs[field.key] = input;
-    cell.appendChild(input);
+
+    let control;
+
+    if (field.type === "select") {
+      // ── <select> ──────────────────────────────────────────────────────────
+      control = document.createElement("select");
+      if (!field.required) {
+        const none = document.createElement("option");
+        none.value = ""; none.textContent = field.placeholder || "—";
+        control.appendChild(none);
+      }
+      for (const opt of field.options || []) {
+        const o = document.createElement("option");
+        o.value = String(opt.value ?? opt);
+        o.textContent = opt.label ?? opt;
+        control.appendChild(o);
+      }
+      control.value = cfg.config[field.key] ?? field.default ?? "";
+
+    } else if (field.type === "checkbox") {
+      // ── <input type="checkbox"> ───────────────────────────────────────────
+      const wrap = document.createElement("label");
+      wrap.style.cssText = "display:flex;align-items:center;gap:8px;font-weight:400;margin-top:2px";
+      control = document.createElement("input");
+      control.type = "checkbox";
+      control.style.width = "auto";
+      control.checked = cfg.config[field.key] === true || cfg.config[field.key] === "true";
+      const span = document.createElement("span");
+      span.textContent = field.checkboxLabel || "";
+      wrap.appendChild(control);
+      wrap.appendChild(span);
+      cell.appendChild(wrap);
+      // skip the standard cell.appendChild(control) below
+      control._isWrapped = true;
+
+    } else if (field.type === "multi-text") {
+      // ── Comma-separated text (displayed as <textarea>) ───────────────────
+      control = document.createElement("textarea");
+      control.rows = 3;
+      control.placeholder = field.placeholder || "one value per line";
+      control.style.resize = "vertical";
+      // Store as newline-separated; present as newline-separated
+      const stored = cfg.config[field.key];
+      control.value = Array.isArray(stored)
+        ? stored.join("\n")
+        : (stored || "").replace(/,\s*/g, "\n");
+
+    } else {
+      // ── text / password / number (default) ───────────────────────────────
+      control = document.createElement("input");
+      control.type = field.type === "password" ? "password"
+                   : field.type === "number"   ? "number"
+                   : "text";
+      if (field.min  != null) control.min  = field.min;
+      if (field.max  != null) control.max  = field.max;
+      if (field.step != null) control.step = field.step;
+      control.placeholder = field.placeholder || "";
+      control.value = cfg.config[field.key] ?? field.default ?? "";
+    }
+
+    integInputs[field.key] = control;
+    if (!control._isWrapped) cell.appendChild(control);
+
     if (field.help) {
       const h = document.createElement("div");
       h.className = "hint";
@@ -462,7 +519,17 @@ async function openIntegModal(integ) {
 
 async function saveIntegModal() {
   const config = {};
-  for (const [k, input] of Object.entries(integInputs)) config[k] = input.value.trim();
+  for (const [k, control] of Object.entries(integInputs)) {
+    const field = modalInteg.configSchema.find((f) => f.key === k);
+    if (field?.type === "checkbox") {
+      config[k] = control.checked;
+    } else if (field?.type === "multi-text") {
+      // Store as array; split on newlines and commas, filter blanks
+      config[k] = control.value.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+    } else {
+      config[k] = typeof control.value === "string" ? control.value.trim() : control.value;
+    }
+  }
   await send({ type: "SET_INTEGRATION_CONFIG", id: modalInteg.id, enabled: integToggle.checked, config });
 }
 

@@ -29,7 +29,10 @@
         "sentinelone.net",
         "login.microsoftonline.com",
         "graph.microsoft.com",
-        "api.securitycenter.microsoft.com"
+        "api.securitycenter.microsoft.com",
+        "ingrammicro.com",
+        "tdsynnex.com",
+        "dandh.com"
       ],
       "resourceTypes": [
         "xmlhttprequest"

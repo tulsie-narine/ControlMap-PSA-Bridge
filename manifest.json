@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ControlMap Bridge",
-  "version": "0.5.0",
-  "description": "Context-aware overlay for ControlMap: PSA ticketing (Autotask, ConnectWise, HaloPSA) plus an open integration framework that pulls compliance evidence from security tools (SentinelOne first) and proposes assessment answers.",
+  "name": "ScalePad Atlas",
+  "version": "0.8.3",
+  "description": "ScalePad Atlas \u2014 context-aware mascot overlay across ScalePad products (ControlMap PSA ticketing + evidence integrations; Lifecycle Manager and more).",
   "permissions": [
     "storage",
     "declarativeNetRequest"
@@ -20,7 +20,14 @@
     "https://*.sentinelone.net/*",
     "https://login.microsoftonline.com/*",
     "https://graph.microsoft.com/*",
-    "https://api.securitycenter.microsoft.com/*"
+    "https://api.securitycenter.microsoft.com/*",
+    "https://app.scalepad.com/*",
+    "https://*.quoter.com/*",
+    "https://admin.scalepad.com/*",
+    "https://*.backupradar.com/*",
+    "https://api.ingrammicro.com/*",
+    "https://*.tdsynnex.com/*",
+    "https://*.dandh.com/*"
   ],
   "declarative_net_request": {
     "rule_resources": [
@@ -38,9 +45,14 @@
   "content_scripts": [
     {
       "matches": [
-        "https://*.app.ctrlmap.com/*"
+        "https://*.app.ctrlmap.com/*",
+        "https://app.scalepad.com/*",
+        "https://*.quoter.com/*",
+        "https://admin.scalepad.com/*",
+        "https://*.backupradar.com/*"
       ],
       "js": [
+        "mascot.js",
         "content.js"
       ],
       "run_at": "document_idle"
@@ -48,17 +60,34 @@
   ],
   "options_page": "options.html",
   "action": {
-    "default_title": "ControlMap Bridge \u2014 open settings"
+    "default_title": "ScalePad Atlas \u2014 open settings",
+    "default_icon": {
+      "16": "assets/icons/atlas-16.png",
+      "32": "assets/icons/atlas-32.png",
+      "48": "assets/icons/atlas-48.png",
+      "128": "assets/icons/atlas-128.png"
+    }
   },
   "web_accessible_resources": [
     {
       "resources": [
         "assets/*",
-        "integrations/*/logo.svg"
+        "integrations/*/logo.svg",
+        "assets/mascot/*"
       ],
       "matches": [
-        "https://*.app.ctrlmap.com/*"
+        "https://*.app.ctrlmap.com/*",
+        "https://app.scalepad.com/*",
+        "https://*.quoter.com/*",
+        "https://admin.scalepad.com/*",
+        "https://*.backupradar.com/*"
       ]
     }
-  ]
+  ],
+  "icons": {
+    "16": "assets/icons/atlas-16.png",
+    "32": "assets/icons/atlas-32.png",
+    "48": "assets/icons/atlas-48.png",
+    "128": "assets/icons/atlas-128.png"
+  }
 }

@@ -1,5 +1,5 @@
 /**
- * ControlMap Bridge — background service worker entry point.
+ * ScalePad Atlas — background service worker entry point.
  *
  * This file is intentionally thin. All logic lives in:
  *   background/router.js          — message dispatcher

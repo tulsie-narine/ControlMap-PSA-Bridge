@@ -17,6 +17,12 @@ export const DEFAULT_SETTINGS = {
   integrations: {},
   // last check results: { [integrationId]: { [checkId]: {result, ranAt} } }
   lastRuns: {},
+  // pre-mapped evidence targets, per integration + ControlMap client:
+  // { [integrationId]: { [clientId]: { [checkId]: { mode:"skip"|"new"|"existing", title?, evidenceId? } } } }
+  evidenceMap: {},
+  // Quoter procurement: API key (falls back to scalepadApiKey) + distributor directory
+  // distributors: [{ name, email }]  — name should match the "Supplier" on Quoter items
+  quoter: { distributors: [] },
 };
 
 export async function getSettings() {
@@ -51,4 +57,25 @@ export async function saveLastRun(integrationId, checkId, result) {
   lastRuns[integrationId] = lastRuns[integrationId] || {};
   lastRuns[integrationId][checkId] = { result, ranAt: new Date().toISOString() };
   await chrome.storage.local.set({ lastRuns });
+}
+
+
+export function getEvidenceMap(settings, integrationId, clientId) {
+  return settings.evidenceMap?.[integrationId]?.[clientId] || {};
+}
+
+export async function setEvidenceMap(integrationId, clientId, map) {
+  const { evidenceMap } = await chrome.storage.local.get({ evidenceMap: {} });
+  evidenceMap[integrationId] = evidenceMap[integrationId] || {};
+  evidenceMap[integrationId][clientId] = map || {};
+  await chrome.storage.local.set({ evidenceMap });
+}
+
+/** Persist a single check's mapping (used to cache a newly-created evidence id). */
+export async function patchEvidenceMapEntry(integrationId, clientId, checkId, entry) {
+  const { evidenceMap } = await chrome.storage.local.get({ evidenceMap: {} });
+  evidenceMap[integrationId] = evidenceMap[integrationId] || {};
+  evidenceMap[integrationId][clientId] = evidenceMap[integrationId][clientId] || {};
+  evidenceMap[integrationId][clientId][checkId] = { ...(evidenceMap[integrationId][clientId][checkId] || {}), ...entry };
+  await chrome.storage.local.set({ evidenceMap });
 }

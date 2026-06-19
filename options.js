@@ -415,7 +415,42 @@ async function openIntegModal(integ) {
   title.appendChild(document.createTextNode(integ.name));
 
   const body = $("integModalBody");
-  body.innerHTML = `<div class="hint" style="margin-bottom:8px">${integ.description} <b>v${integ.version}</b> · ${integ.checks.length} check(s)</div>`;
+  body.innerHTML = "";
+
+  // ── Tab bar ──
+  const tabBar = document.createElement("div");
+  tabBar.className = "mtabs";
+  const tabConfig = document.createElement("button");
+  tabConfig.type = "button"; tabConfig.className = "mtab active"; tabConfig.textContent = "Configuration";
+  const tabMap = document.createElement("button");
+  tabMap.type = "button"; tabMap.className = "mtab"; tabMap.textContent = "Evidence Mapping";
+  tabBar.appendChild(tabConfig); tabBar.appendChild(tabMap);
+  body.appendChild(tabBar);
+
+  const paneConfig = document.createElement("div");
+  paneConfig.className = "mpane active";
+  paneConfig.style.padding = "14px 0 0";
+  const paneMap = document.createElement("div");
+  paneMap.className = "mpane";
+  paneMap.style.padding = "14px 0 0";
+  body.appendChild(paneConfig);
+  body.appendChild(paneMap);
+
+  let mapBuilt = false;
+  function showTab(which) {
+    tabConfig.classList.toggle("active", which === "config");
+    tabMap.classList.toggle("active", which === "map");
+    paneConfig.classList.toggle("active", which === "config");
+    paneMap.classList.toggle("active", which === "map");
+    // footer Test/Save apply to Configuration only
+    $("integModalTest").style.display = which === "config" ? "" : "none";
+    $("integModalSave").style.display = which === "config" ? "" : "none";
+    if (which === "map" && !mapBuilt) { mapBuilt = true; buildEvidenceMapPane(paneMap, integ); }
+  }
+  tabConfig.addEventListener("click", () => showTab("config"));
+  tabMap.addEventListener("click", () => showTab("map"));
+
+  paneConfig.innerHTML = `<div class="hint" style="margin-bottom:8px">${integ.description} <b>v${integ.version}</b> · ${integ.checks.length} check(s)</div>`;
 
   const cfg = await send({ type: "GET_INTEGRATION_CONFIG", id: integ.id });
 
@@ -427,7 +462,7 @@ async function openIntegModal(integ) {
   integToggle.checked = !!cfg.enabled;
   toggleWrap.appendChild(integToggle);
   toggleWrap.appendChild(document.createTextNode("Enabled (shown in the overlay panel)"));
-  body.appendChild(toggleWrap);
+  paneConfig.appendChild(toggleWrap);
 
   const grid = document.createElement("div");
   grid.className = "row";
@@ -507,13 +542,14 @@ async function openIntegModal(integ) {
     }
     grid.appendChild(cell);
   }
-  body.appendChild(grid);
+  paneConfig.appendChild(grid);
 
   const msg = document.createElement("div");
   msg.className = "msg";
   msg.id = "integModalMsg";
-  body.appendChild(msg);
+  paneConfig.appendChild(msg);
 
+  showTab("config");
   $("integModal").classList.add("open");
 }
 
@@ -552,4 +588,369 @@ $("integModalTest").addEventListener("click", async () => {
   } catch (e) { flash("integModalMsg", e.message, false); }
 });
 
+// ===================== Evidence pre-mapping (per integration + client) =====================
+
+async function buildEvidenceMapPane(pane, integ) {
+  pane.innerHTML = "";
+  pane.appendChild(Object.assign(document.createElement("div"), {
+    className: "hint",
+    style: "margin-bottom:8px",
+    textContent: "Pre-map where each check's evidence should go in ControlMap for a client. Then use “Attach pre-mapped” in the overlay panel to upload all checks at once.",
+  }));
+
+  // Client picker
+  const clientWrap = document.createElement("div");
+  const clientLbl = document.createElement("label"); clientLbl.textContent = "ControlMap client";
+  const clientSel = document.createElement("select");
+  clientSel.innerHTML = "<option value=''>— loading clients… —</option>";
+  clientWrap.appendChild(clientLbl); clientWrap.appendChild(clientSel);
+  pane.appendChild(clientWrap);
+
+  const rowsWrap = document.createElement("div");
+  rowsWrap.style.marginTop = "12px";
+  pane.appendChild(rowsWrap);
+
+  const bar = document.createElement("div");
+  bar.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:12px";
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "btn"; saveBtn.style.margin = "0"; saveBtn.textContent = "Save mapping";
+  const bulkNew = document.createElement("button");
+  bulkNew.className = "btn ghost"; bulkNew.type = "button"; bulkNew.textContent = "Set all → Create new";
+  bar.appendChild(saveBtn); bar.appendChild(bulkNew);
+  pane.appendChild(bar);
+  const mapMsg = document.createElement("div"); mapMsg.className = "msg"; pane.appendChild(mapMsg);
+
+  function flashMap(text, ok) { mapMsg.textContent = text; mapMsg.className = "msg " + (ok ? "ok" : "err"); }
+
+  let evidences = [];      // [{id, code, title}]
+  let rowControls = [];    // [{checkId, modeSel, titleIn, evSel}]
+
+  // Load clients, default to a tenant-mapped client if available
+  let defaultClientId = "";
+  try {
+    const settings = await chrome.storage.local.get({ tenantMap: {} });
+    const first = Object.values(settings.tenantMap || {})[0];
+    if (first?.id) defaultClientId = first.id;
+  } catch { /* ignore */ }
+
+  try {
+    const { clients } = await send({ type: "LIST_CM_CLIENTS" });
+    clientSel.innerHTML = "<option value=''>— select client —</option>";
+    for (const c of clients) {
+      const id = c.id || c.client_id; if (!id) continue;
+      const opt = document.createElement("option");
+      opt.value = id; opt.textContent = c.name || c.client_name || id;
+      clientSel.appendChild(opt);
+    }
+    if (defaultClientId && [...clientSel.options].some((o) => o.value === defaultClientId)) {
+      clientSel.value = defaultClientId;
+    }
+  } catch (e) {
+    clientSel.innerHTML = `<option value=''>— could not load clients —</option>`;
+    flashMap(e.message, false);
+  }
+
+  function fillEvSelect(sel, currentId) {
+    sel.innerHTML = "<option value=''>— select evidence —</option>";
+    for (const ev of evidences) {
+      const o = document.createElement("option");
+      o.value = String(ev.id);
+      o.textContent = `${ev.code || ev.id} — ${String(ev.title || "").slice(0, 60)}`;
+      sel.appendChild(o);
+    }
+    if (currentId) sel.value = String(currentId);
+  }
+
+  async function loadForClient(clientId) {
+    rowsWrap.innerHTML = "";
+    rowControls = [];
+    if (!clientId) return;
+    rowsWrap.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "Loading checks and evidences…" }));
+    let map = {}, checks = [];
+    try {
+      const r = await send({ type: "GET_EVIDENCE_MAP", integrationId: integ.id, clientId });
+      map = r.map || {}; checks = r.checks || [];
+      const ev = await send({ type: "LIST_EVIDENCES_FOR_CLIENT", clientId });
+      evidences = ev.evidences || [];
+    } catch (e) { rowsWrap.innerHTML = ""; flashMap(e.message, false); return; }
+
+    rowsWrap.innerHTML = "";
+    for (const c of checks) {
+      const saved = map[c.id] || { mode: "skip" };
+      const row = document.createElement("div"); row.className = "emap-row";
+      const ck = document.createElement("div"); ck.className = "ck";
+      ck.innerHTML = `<b>${c.title}</b><small>${c.id}${c.frameworks?.length ? " · " + c.frameworks.slice(0,2).join(" · ") : ""}</small>`;
+      const ctl = document.createElement("div"); ctl.className = "emap-ctl";
+
+      const modeSel = document.createElement("select");
+      for (const [v, t] of [["skip","Skip"],["new","Create new"],["existing","Map to existing"]]) {
+        const o = document.createElement("option"); o.value = v; o.textContent = t; modeSel.appendChild(o);
+      }
+      modeSel.value = saved.mode || "skip";
+
+      const titleIn = document.createElement("input");
+      titleIn.type = "text";
+      titleIn.placeholder = "new evidence title";
+      titleIn.value = saved.title || `[${integ.name}] ${c.title}`;
+
+      const evSel = document.createElement("select");
+      fillEvSelect(evSel, saved.evidenceId);
+
+      function sync() {
+        titleIn.style.display = modeSel.value === "new" ? "" : "none";
+        evSel.style.display = modeSel.value === "existing" ? "" : "none";
+      }
+      modeSel.addEventListener("change", sync);
+      sync();
+
+      ctl.appendChild(modeSel); ctl.appendChild(titleIn); ctl.appendChild(evSel);
+      row.appendChild(ck); row.appendChild(ctl);
+      rowsWrap.appendChild(row);
+      rowControls.push({ checkId: c.id, modeSel, titleIn, evSel });
+    }
+    if (!checks.length) rowsWrap.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "No checks." }));
+  }
+
+  clientSel.addEventListener("change", () => loadForClient(clientSel.value));
+  if (clientSel.value) loadForClient(clientSel.value);
+
+  bulkNew.addEventListener("click", () => {
+    for (const rc of rowControls) { rc.modeSel.value = "new"; rc.modeSel.dispatchEvent(new Event("change")); }
+  });
+
+  saveBtn.addEventListener("click", async () => {
+    const clientId = clientSel.value;
+    if (!clientId) { flashMap("Select a client first.", false); return; }
+    const map = {};
+    for (const rc of rowControls) {
+      const mode = rc.modeSel.value;
+      if (mode === "new") map[rc.checkId] = { mode: "new", title: rc.titleIn.value.trim() };
+      else if (mode === "existing") {
+        if (!rc.evSel.value) { flashMap(`Pick an evidence for ${rc.checkId}, or set it to Skip.`, false); return; }
+        map[rc.checkId] = { mode: "existing", evidenceId: Number(rc.evSel.value) };
+      } else map[rc.checkId] = { mode: "skip" };
+    }
+    try {
+      await send({ type: "SET_EVIDENCE_MAP", integrationId: integ.id, clientId, map });
+      const n = Object.values(map).filter((m) => m.mode !== "skip").length;
+      flashMap(`Saved — ${n} check(s) mapped for this client.`, true);
+    } catch (e) { flashMap(e.message, false); }
+  });
+}
+
+
+// ===================== Product tabs (ControlMap / Lifecycle Manager) =====================
+document.querySelectorAll(".prod-tab").forEach((t) => {
+  t.addEventListener("click", () => {
+    const prod = t.dataset.prod;
+    document.querySelectorAll(".prod-tab").forEach((x) => x.classList.toggle("active", x === t));
+    document.querySelectorAll(".prodpane").forEach((p) => p.classList.toggle("active", p.id === "prodPane-" + prod));
+  });
+});
+
 renderIntegrations();
+
+// ---------- Quoter: distributor directory + API adapters ----------
+const DIST_ADAPTER_DEFS = {
+  none: { label: "None (email only)", fields: [] },
+  simulate: { label: "Simulate (no real API call)", fields: [
+    { key: "outcome", label: "Simulated outcome", type: "select", options: ["success", "out-of-stock", "error"], default: "success" },
+    { key: "delayMs", label: "Simulated delay (ms)", type: "text", default: "600" },
+  ] },
+  ingram: { label: "Ingram Micro (Xvantage)", fields: [
+    { key: "clientId", label: "Client ID", type: "text" },
+    { key: "clientSecret", label: "Client Secret", type: "password" },
+    { key: "customerNumber", label: "Customer Number", type: "text" },
+    { key: "countryCode", label: "Country code", type: "text", default: "US" },
+    { key: "senderId", label: "Sender ID (app name)", type: "text", default: "ScalePadAtlas" },
+    { key: "environment", label: "Environment", type: "select", options: ["sandbox", "production"], default: "sandbox" },
+  ] },
+  tdsynnex: { label: "TD SYNNEX (Reseller)", fields: [
+    { key: "baseUrl", label: "API base URL", type: "text", default: "https://api.tdsynnex.com" },
+    { key: "apiKey", label: "API key", type: "text" },
+    { key: "apiSecret", label: "API secret", type: "password" },
+    { key: "customerNumber", label: "Customer / account number", type: "text" },
+    { key: "country", label: "Country", type: "text", default: "US" },
+    { key: "orderPath", label: "Create-order path", type: "text", default: "/v1/orders" },
+    { key: "paPath", label: "Price/availability path", type: "text", default: "/v1/price-availability" },
+  ] },
+  dh: { label: "D&H Distributing", fields: [
+    { key: "baseUrl", label: "API base URL", type: "text", default: "https://api.dandh.com" },
+    { key: "apiKey", label: "API key / username", type: "text" },
+    { key: "apiSecret", label: "API secret / password", type: "password" },
+    { key: "accountNumber", label: "Account number", type: "text" },
+    { key: "orderPath", label: "Create-order path", type: "text", default: "/v1/orders" },
+    { key: "paPath", label: "Price/availability path", type: "text", default: "/v1/priceavailability" },
+  ] },
+};
+
+let quoterDistributors = [];
+
+function elx(tag, attrs = {}, kids = []) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "text") n.textContent = v;
+    else if (k === "html") n.innerHTML = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v);
+  }
+  for (const c of kids) n.appendChild(c);
+  return n;
+}
+
+async function saveDistributors() {
+  await send({ type: "QUOTER_SAVE_DISTRIBUTORS", distributors: quoterDistributors });
+}
+
+function renderApiFields(dist, host) {
+  host.innerHTML = "";
+  const def = DIST_ADAPTER_DEFS[dist.api.adapter] || DIST_ADAPTER_DEFS.none;
+  if (!def.fields.length) return;
+  const grid = elx("div", { class: "row", style: "margin-top:8px" });
+  for (const f of def.fields) {
+    const wrap = elx("div", {});
+    wrap.appendChild(elx("label", { text: f.label }));
+    let input;
+    if (f.type === "select") {
+      input = elx("select", {});
+      for (const o of f.options) {
+        const opt = elx("option", { value: o, text: o });
+        if ((dist.api[f.key] || f.default) === o) opt.selected = true;
+        input.appendChild(opt);
+      }
+    } else {
+      input = elx("input", { type: f.type === "password" ? "password" : "text", autocomplete: "off" });
+      input.value = dist.api[f.key] != null ? dist.api[f.key] : (f.default || "");
+      if (dist.api[f.key] == null && f.default) dist.api[f.key] = f.default;
+    }
+    input.addEventListener("input", () => { dist.api[f.key] = input.value; });
+    input.addEventListener("change", () => { dist.api[f.key] = input.value; });
+    wrap.appendChild(input);
+    grid.appendChild(wrap);
+  }
+  host.appendChild(grid);
+}
+
+function renderDistCards() {
+  const wrap = document.getElementById("distCards");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  if (!quoterDistributors.length) {
+    wrap.appendChild(elx("div", { class: "hint", text: "No distributors yet." }));
+    return;
+  }
+  quoterDistributors.forEach((dist, idx) => {
+    if (!dist.api) dist.api = { adapter: "none", enabled: false };
+    const card = elx("div", { style: "border:1px solid #d8dbe6;border-radius:10px;padding:12px 14px;margin:10px 0;background:#fafbff" });
+
+    const head = elx("div", { style: "display:flex;align-items:center;gap:10px;margin-bottom:8px" });
+    head.appendChild(elx("div", { style: "font-weight:700;font-size:14px;flex:1", text: dist.name || "(unnamed)" }));
+    head.appendChild(elx("button", { class: "btn ghost", type: "button", text: "Remove", onclick: async () => {
+      quoterDistributors.splice(idx, 1); await saveDistributors(); renderDistCards();
+    } }));
+    card.appendChild(head);
+
+    const top = elx("div", { class: "row" });
+    const emailWrap = elx("div", {});
+    emailWrap.appendChild(elx("label", { text: "Order email" }));
+    const emailIn = elx("input", { type: "text", autocomplete: "off" });
+    emailIn.value = dist.email || "";
+    emailIn.addEventListener("input", () => { dist.email = emailIn.value; });
+    emailWrap.appendChild(emailIn);
+
+    const adWrap = elx("div", {});
+    adWrap.appendChild(elx("label", { text: "Order API" }));
+    const adSel = elx("select", {});
+    for (const [v, d] of Object.entries(DIST_ADAPTER_DEFS)) {
+      const o = elx("option", { value: v, text: d.label });
+      if ((dist.api.adapter || "none") === v) o.selected = true;
+      adSel.appendChild(o);
+    }
+    adWrap.appendChild(adSel);
+    top.appendChild(emailWrap);
+    top.appendChild(adWrap);
+    card.appendChild(top);
+
+    const aliasWrap = elx("div", { style: "margin-top:8px" });
+    aliasWrap.appendChild(elx("label", { text: "Also match these supplier names (comma-separated, exactly as shown on Quoter items)" }));
+    const aliasIn = elx("input", { type: "text", autocomplete: "off", placeholder: "e.g. Ingram, Ingram Micro Inc" });
+    aliasIn.value = (dist.aliases || []).join(", ");
+    aliasIn.addEventListener("input", () => { dist.aliases = aliasIn.value.split(",").map((x) => x.trim()).filter(Boolean); });
+    aliasWrap.appendChild(aliasIn);
+    aliasWrap.appendChild(elx("div", { class: "hint", text: "Atlas already matches close names (e.g. \u201cIngram\u201d ↔ \u201cIngram Micro\u201d). Add aliases for ones that differ, e.g. \u201cTech Data\u201d for a TD SYNNEX entry." }));
+    card.appendChild(aliasWrap);
+
+    const fieldsHost = elx("div", {});
+    card.appendChild(fieldsHost);
+    renderApiFields(dist, fieldsHost);
+
+    const footer = elx("div", { style: "display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap" });
+    const enableLbl = elx("label", { style: "display:flex;align-items:center;gap:6px;margin:0;font-weight:600" });
+    const enableChk = elx("input", { type: "checkbox" });
+    enableChk.checked = !!dist.api.enabled;
+    enableChk.disabled = (dist.api.adapter || "none") === "none";
+    enableChk.addEventListener("change", () => { dist.api.enabled = enableChk.checked; });
+    enableLbl.appendChild(enableChk);
+    enableLbl.appendChild(document.createTextNode("Enable API ordering"));
+
+    const testBtn = elx("button", { class: "btn ghost", type: "button", text: "Test connection" });
+    const saveBtn = elx("button", { class: "btn", type: "button", text: "Save" });
+    const msg = elx("div", { class: "msg", style: "flex-basis:100%" });
+
+    testBtn.disabled = (dist.api.adapter || "none") === "none";
+    testBtn.addEventListener("click", async () => {
+      msg.textContent = "Testing…"; msg.className = "msg";
+      try {
+        const r = await send({ type: "DIST_TEST", adapterType: dist.api.adapter, cfg: dist.api });
+        msg.textContent = r.summary || "OK"; msg.className = "msg ok";
+      } catch (e) { msg.textContent = e.message; msg.className = "msg err"; }
+    });
+    saveBtn.addEventListener("click", async () => {
+      try { await saveDistributors(); msg.textContent = "Saved."; msg.className = "msg ok"; renderDistCards(); }
+      catch (e) { msg.textContent = e.message; msg.className = "msg err"; }
+    });
+
+    adSel.addEventListener("change", () => {
+      dist.api.adapter = adSel.value;
+      if (adSel.value === "none") dist.api.enabled = false;
+      renderApiFields(dist, fieldsHost);
+      enableChk.disabled = adSel.value === "none";
+      testBtn.disabled = adSel.value === "none";
+      if (adSel.value === "none") enableChk.checked = false;
+    });
+
+    footer.appendChild(enableLbl);
+    footer.appendChild(testBtn);
+    footer.appendChild(saveBtn);
+    footer.appendChild(msg);
+    card.appendChild(footer);
+
+    wrap.appendChild(card);
+  });
+}
+
+if (document.getElementById("dsAdd")) {
+  document.getElementById("dsAdd").addEventListener("click", async () => {
+    const name = document.getElementById("dsName").value.trim();
+    const email = document.getElementById("dsEmail").value.trim();
+    if (!name) { flash("dsMsg", "Enter a distributor name.", false); return; }
+    const idx = quoterDistributors.findIndex((d) => (d.name || "").toLowerCase() === name.toLowerCase());
+    if (idx >= 0) { quoterDistributors[idx].email = email; }
+    else quoterDistributors.push({ name, email, aliases: [], api: { adapter: "none", enabled: false } });
+    await saveDistributors();
+    document.getElementById("dsName").value = ""; document.getElementById("dsEmail").value = "";
+    renderDistCards();
+    flash("dsMsg", "Saved.", true);
+  });
+}
+
+(async function initQuoterPane() {
+  try {
+    const s = await chrome.storage.local.get({ quoter: { distributors: [] } });
+    const q = s.quoter || {};
+    quoterDistributors = (Array.isArray(q.distributors) ? q.distributors : []).map((d) => ({
+      name: d.name || "", email: d.email || "", aliases: Array.isArray(d.aliases) ? d.aliases : [], api: d.api || { adapter: "none", enabled: false },
+    }));
+    renderDistCards();
+  } catch (e) { /* ignore */ }
+})();

@@ -14,21 +14,23 @@
  *   Panel             GET_PANEL_CONTEXT, APPLY_RESULT
  *   Ticket evidence   GET_TICKET_FILTERS, SEARCH_TICKETS, LIST_EVIDENCES,
  *                     COLLECT_TICKET_EVIDENCE
+ *   Quoter            QUOTER_CONTEXT, QUOTER_LIST_WON_QUOTES, QUOTER_SAVE_DISTRIBUTORS
  *   Shell             OPEN_OPTIONS
  */
 
-import { getSettings, saveSettings, integrationConfig } from "../core/store.js";
+import { getSettings, saveSettings, integrationConfig, getEvidenceMap, setEvidenceMap, patchEvidenceMapEntry } from "../core/store.js";
 import * as sp                                          from "../core/scalepad.js";
+import { getDistributorAdapter }                       from "../core/distributors.js";
 import { PSA_ADAPTERS, suggestPriority }               from "../core/psa.js";
 import { INTEGRATIONS, getIntegration }                from "../integrations/registry.js";
-import { buildTicketEvidencePdf }                      from "../core/pdf.js";
+import { buildTicketEvidencePdf, buildCheckEvidencePdf, buildExecReportPdf } from "../core/pdf.js";
 import {
   runCheck,
   integrationMeta,
   checkCtx,
   buildPanelIntegrations,
 } from "./integrationRunner.js";
-import { sha256Hex, ticketStats }                      from "./evidenceHelpers.js";
+import { sha256Hex, ticketStats, attachCheckEvidence }  from "./evidenceHelpers.js";
 
 // ---------------------------------------------------------------------------
 // Message handler
@@ -115,7 +117,8 @@ async function handleMessage(msg) {
     }
 
     case "LIST_CM_CLIENTS":
-      return { clients: await sp.listClients(settings) };
+      // ControlMap-provisioned clients (valid CM ids), not all ScalePad org clients.
+      return { clients: await sp.listControlMapClients(settings) };
 
     case "TEST_SCALEPAD": {
       const clients = await sp.listClients(settings);
@@ -212,17 +215,8 @@ async function handleMessage(msg) {
       const out = { evidence: null, answer: null };
 
       if (msg.attachEvidence !== false) {
-        const detailLines = (r.details || []).join("\n");
-        out.evidence = await sp.createEvidenceWithSnapshot(settings, client.id, {
-          title:       `[${integration.name}] ${check.title} — ${date}`,
-          description: `${r.summary}\n${detailLines}\n\nCheck: ${check.id} (${integration.name} v${integration.version})\nStatus: ${r.status}\nRan at: ${run.ranAt}\nFrameworks: ${(check.frameworks || []).join(", ")}`,
-          questionCodes: msg.questionCode ? [msg.questionCode] : [],
-          snapshot: {
-            check: check.id, integration: integration.id,
-            status: r.status, summary: r.summary,
-            ranAt: run.ranAt, data: r.evidence?.snapshot ?? null,
-          },
-          fileName: `${check.id}-${date}.json`,
+        out.evidence = await attachCheckEvidence(settings, client, integration, check, run, {
+          target: msg.target, questionCode: msg.questionCode || null,
         });
       }
       if (msg.answer && msg.questionCode) {
@@ -271,7 +265,7 @@ async function handleMessage(msg) {
           source_system:  psa.name,
           client:         { id: client.id, name: client.name },
           collected_at:   new Date().toISOString(),
-          collector:      `ControlMap Bridge ${chrome.runtime.getManifest().version}`,
+          collector:      `ScalePad Atlas ${chrome.runtime.getManifest().version}`,
           query:          msg.query || {},
           stats,
           notes_included_for_first: Math.min(tickets.length, NOTES_CAP),
@@ -321,6 +315,137 @@ async function handleMessage(msg) {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    // Pre-mapped evidence (bulk attach across all checks of an integration)
+    // ═══════════════════════════════════════════════════════════════════════
+    case "LIST_EVIDENCES_FOR_CLIENT": {
+      // Used by the options page (no ctrlmap tab → no subdomain).
+      return { evidences: await sp.listEvidences(settings, msg.clientId) };
+    }
+
+    case "GET_EVIDENCE_MAP": {
+      const integration = getIntegration(msg.integrationId);
+      return {
+        map: getEvidenceMap(settings, msg.integrationId, msg.clientId),
+        checks: integration.checks.map((c) => ({ id: c.id, title: c.title, frameworks: c.frameworks || [] })),
+      };
+    }
+
+    case "SET_EVIDENCE_MAP": {
+      await setEvidenceMap(msg.integrationId, msg.clientId, msg.map || {});
+      return { ok: true };
+    }
+
+    case "ATTACH_PREMAP": {
+      const client = await sp.resolveTenant(settings, msg.subdomain);
+      const integration = getIntegration(msg.integrationId);
+      const map = getEvidenceMap(settings, msg.integrationId, client.id);
+      const mapped = integration.checks.filter((c) => {
+        const m = map[c.id];
+        return m && m.mode && m.mode !== "skip";
+      });
+      if (!mapped.length) {
+        throw new Error(`No evidence pre-mapping found for "${client.name}". Set it in Settings → ${integration.name} → Evidence Mapping.`);
+      }
+
+      const results = [];
+      let attached = 0, failed = 0;
+      for (const check of mapped) {
+        const entry = map[check.id];
+        try {
+          // ensure a fresh run exists
+          let run = settings.lastRuns?.[msg.integrationId]?.[check.id];
+          if (!run || msg.rerun) {
+            const result = await runCheck(settings, msg.integrationId, check.id);
+            run = { result, ranAt: new Date().toISOString() };
+            // refresh local settings cache so subsequent reads see it
+            settings.lastRuns = settings.lastRuns || {};
+            settings.lastRuns[msg.integrationId] = settings.lastRuns[msg.integrationId] || {};
+            settings.lastRuns[msg.integrationId][check.id] = run;
+          }
+
+          // resolve target: existing id, or cached new id, else create-new
+          let target;
+          if (entry.mode === "existing" && entry.evidenceId) {
+            target = { mode: "existing", evidenceId: Number(entry.evidenceId) };
+          } else if (entry.mode === "new" && entry.evidenceId) {
+            // created on a previous run → append to it
+            target = { mode: "existing", evidenceId: Number(entry.evidenceId) };
+          } else {
+            target = { mode: "new", title: entry.title || `[${integration.name}] ${check.title}` };
+          }
+
+          const ev = await attachCheckEvidence(settings, client, integration, check, run, { target });
+
+          // cache a freshly created evidence id so future runs append instead of duplicating
+          if (entry.mode === "new" && !entry.evidenceId && ev.evidenceId) {
+            await patchEvidenceMapEntry(msg.integrationId, client.id, check.id, { evidenceId: ev.evidenceId });
+          }
+          attached++;
+          results.push({ checkId: check.id, ok: true, mode: ev.mode, evidenceId: ev.evidenceId, status: run.result.status });
+        } catch (e) {
+          failed++;
+          results.push({ checkId: check.id, ok: false, error: e.message });
+        }
+      }
+      return { client: { id: client.id, name: client.name }, attached, failed, total: mapped.length, results };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Quoter — distributor procurement
+    // ═══════════════════════════════════════════════════════════════════════
+    case "QUOTER_CONTEXT":
+      return {
+        apiConfigured: !!settings.scalepadApiKey,
+        distributors: ((settings.quoter && settings.quoter.distributors) || []).map((d) => ({
+          name: d.name || "",
+          email: d.email || "",
+          aliases: Array.isArray(d.aliases) ? d.aliases : [],
+          apiAdapter: (d.api && d.api.adapter) || "none",
+          apiEnabled: !!(d.api && d.api.enabled && d.api.adapter && d.api.adapter !== "none"),
+        })),
+      };
+
+    case "QUOTER_REPORT_QUOTES":
+      return { quotes: await sp.listQuotesInRange(settings, { after: msg.after || null, before: msg.before || null }) };
+
+    case "EXEC_REPORT_PDF": {
+      const blob = buildExecReportPdf(msg.report || {});
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+      return { base64: btoa(bin), filename: msg.filename || "executive-quote-report.pdf" };
+    }
+
+    case "QUOTER_LIST_WON_QUOTES":
+      return { quotes: await sp.listWonQuotes(settings, { wonAfter: msg.wonAfter || null, wonBefore: msg.wonBefore || null }) };
+
+    case "QUOTER_SAVE_DISTRIBUTORS": {
+      const quoter = { ...(settings.quoter || {}), distributors: Array.isArray(msg.distributors) ? msg.distributors : [] };
+      await saveSettings({ quoter });
+      return { ok: true };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Distributor APIs (Pathway B — order push). Credentials never leave bg.
+    // ═══════════════════════════════════════════════════════════════════════
+    case "DIST_TEST": {
+      const { adapter, cfg } = distLookup(settings, msg.adapterType, msg.cfg);
+      return await adapter.test(cfg);
+    }
+    case "DIST_PA": {
+      const { adapter, cfg } = distLookup(settings, null, null, msg.name);
+      return { result: await adapter.getPriceAvailability(cfg, msg.items || []) };
+    }
+    case "DIST_CREATE_ORDER": {
+      const { adapter, cfg } = distLookup(settings, null, null, msg.name);
+      return await adapter.createOrder(cfg, msg.order || {});
+    }
+    case "DIST_ORDER_STATUS": {
+      const { adapter, cfg } = distLookup(settings, null, null, msg.name);
+      return await adapter.getOrderStatus(cfg, msg.orderId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     // Shell
     // ═══════════════════════════════════════════════════════════════════════
     case "OPEN_OPTIONS":
@@ -330,4 +455,27 @@ async function handleMessage(msg) {
     default:
       throw new Error(`Unknown message type: ${msg.type}`);
   }
+}
+
+
+// Resolve a distributor adapter + its stored credentials.
+// For TEST we may receive an unsaved cfg directly (msg.cfg); for live calls we
+// look the distributor up by name so credentials never round-trip to content.
+function distLookup(settings, adapterType, directCfg, name) {
+  if (name != null) {
+    const list = (settings.quoter && settings.quoter.distributors) || [];
+    const norm = (x) => (x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const n = norm(name);
+    const d = list.find((x) => {
+      const names = [x.name, ...((x.aliases) || [])].map(norm).filter(Boolean);
+      return names.some((m) => m === n || (m.length >= 3 && n.length >= 3 && (m.includes(n) || n.includes(m))));
+    });
+    if (!d || !d.api || !d.api.adapter || d.api.adapter === "none") throw new Error(`No API configured for distributor "${name}".`);
+    const adapter = getDistributorAdapter(d.api.adapter);
+    if (!adapter) throw new Error(`Unknown distributor adapter: ${d.api.adapter}`);
+    return { adapter, cfg: d.api };
+  }
+  const adapter = getDistributorAdapter(adapterType);
+  if (!adapter) throw new Error(`Unknown distributor adapter: ${adapterType}`);
+  return { adapter, cfg: directCfg || {} };
 }

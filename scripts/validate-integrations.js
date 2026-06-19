@@ -105,7 +105,7 @@ if (!importedIds.length) {
 
 let problems = 0;
 
-console.log(`\nControlMap Bridge — integration host validation`);
+console.log(`\nScalePad Atlas — integration host validation`);
 console.log(`${"─".repeat(54)}`);
 console.log(`Checking ${importedIds.length} integration(s): ${importedIds.join(", ")}\n`);
 

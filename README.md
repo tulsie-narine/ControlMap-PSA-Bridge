@@ -1,4 +1,4 @@
-# ControlMap Bridge
+# ScalePad Atlas
 
 Browser extension (Chrome/Edge, Mac + Windows) that overlays [ControlMap](https://app.ctrlmap.com) with:
 
@@ -9,7 +9,7 @@ Browser extension (Chrome/Edge, Mac + Windows) that overlays [ControlMap](https:
 git clone https://github.com/tulsie-narine/ControlMap-PSA-Bridge.git
 ```
 
-![ControlMap Bridge panel](https://i.ibb.co/nsdNTsM9/Screenshot-2026-06-16-at-1-34-52-PM.png)
+![ScalePad Atlas panel](https://i.ibb.co/nsdNTsM9/Screenshot-2026-06-16-at-1-34-52-PM.png)
 
 ## How it works
 
@@ -114,7 +114,7 @@ Checks that require Entra ID P1/P2, Defender for Endpoint Plan 2, MDI, or E5 lic
 
 ### App registration setup
 
-1. **Azure Portal** → Entra ID → App registrations → New registration. Name it anything (e.g. "ControlMap Bridge"). Single-tenant, no redirect URI.
+1. **Azure Portal** → Entra ID → App registrations → New registration. Name it anything (e.g. "ScalePad Atlas"). Single-tenant, no redirect URI.
 2. Copy the **Application (client) ID** and **Directory (tenant) ID** into the extension options.
 3. **Certificates & secrets** → New client secret → copy the value immediately.
 4. **API permissions** → Add the following (all **Application**, not Delegated) → Grant admin consent:

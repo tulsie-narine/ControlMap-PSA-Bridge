@@ -44,6 +44,28 @@ export async function listClients(settings) {
   return out;
 }
 
+/**
+ * List clients that actually exist in ControlMap, via the compliance health
+ * endpoint. Unlike /core/v1/clients (all ScalePad org clients), these carry
+ * valid ControlMap client ids + tenant_id. Returns [{ id, name, tenant_id }].
+ */
+export async function listControlMapClients(settings) {
+  const out = [];
+  let cursor = null;
+  for (let i = 0; i < 25; i++) {
+    const qs = `?page_size=200&sort=${encodeURIComponent("+client.name")}` + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
+    const page = await spFetch(settings, `/controlmap/v1/clients/health${qs}`, { method: "GET" });
+    const rows = page.data || [];
+    for (const row of rows) {
+      const c = row.client || row;
+      if (c?.id) out.push({ id: c.id, name: c.name || c.id, tenant_id: c.tenant_id || null });
+    }
+    cursor = page.next_cursor || (rows.length ? rows[rows.length - 1]?.next_cursor : null) || null;
+    if (!cursor || rows.length === 0) break;
+  }
+  return out;
+}
+
 export async function resolveTenant(settings, subdomain) {
   const manual = (settings.tenantMap || {})[subdomain];
   if (manual?.id) return manual;
@@ -189,4 +211,109 @@ export async function addEvidenceRequestWithDocument(settings, clientId, evidenc
     } catch { /* notes are best-effort */ }
   }
   return { evidenceRequestId, documents: up?.documents || [] };
+}
+
+// ───────────────────────── Quoter API (US-only) ─────────────────────────
+// Quoter lives at https://api.scalepad.com/quoter regardless of ScalePad region.
+const QUOTER_BASE = "https://api.scalepad.com/quoter";
+
+export async function quoterFetch(settings, path, options = {}) {
+  const key = settings.scalepadApiKey;
+  if (!key) throw new Error("ScalePad API key not configured. Open extension options.");
+  const headers = { "x-api-key": key, ...(options.headers || {}) };
+  if (!options.multipart) headers["Content-Type"] = "application/json";
+  const res = await fetch(QUOTER_BASE + path, { ...options, headers });
+  const text = await res.text();
+  let body;
+  try { body = text ? JSON.parse(text) : {}; } catch { body = { raw: text }; }
+  if (!res.ok) {
+    const e0 = body?.errors?.[0] || {};
+    const raw = typeof body?.raw === "string" ? body.raw.slice(0, 200) : "";
+    const detail = [e0.code, e0.title, e0.detail].filter(Boolean).join(" — ") || raw || res.statusText || "(no error detail)";
+    throw new Error(`Quoter API ${res.status}: ${detail}`);
+  }
+  return body;
+}
+
+/**
+ * List "won" quotes (primary revision only), newest first. The public API
+ * exposes the quote header + totals but NOT line items — those are fetched
+ * client-side from /admin/quotes/view_by_public_id/{id}. Returns a slim shape.
+ */
+export async function listWonQuotes(settings, opts = {}) {
+  const stages = "won-accepted,won-fulfilled,won-ordered";
+  const out = [];
+  let cursor = null;
+  for (let i = 0; i < 40; i++) {
+    let qs = `?filter[stage]=in:${stages}&filter[primary]=eq:true&sort=-won_at&page_size=100`;
+    if (opts.wonAfter)  qs += `&filter[won_at]=gt:${encodeURIComponent(opts.wonAfter)}`;
+    if (opts.wonBefore) qs += `&filter[won_at]=lt:${encodeURIComponent(opts.wonBefore)}`;
+    if (cursor) qs += `&cursor=${encodeURIComponent(cursor)}`;
+    const page = await quoterFetch(settings, `/v1/quotes${qs}`, { method: "GET" });
+    const data = page.data || [];
+    for (const q of data) {
+      out.push({
+        id: q.id,
+        number: q.number,
+        customNumber: q.custom_number || null,
+        name: q.name || "",
+        client: q.client?.name || q.billing_organization || "",
+        clientId: q.client?.id || null,
+        currency: q.currency_iso || "USD",
+        stage: q.stage || "",
+        wonAt: q.won_at || null,
+        total: q.upfront_total_decimal || q.one_time_total_decimal || q.monthly_total_decimal || null,
+        shipping: q.shipping_address || null,
+        shippingName: [q.shipping_first_name, q.shipping_last_name].filter(Boolean).join(" ") || null,
+        shippingOrg: q.shipping_organization || null,
+      });
+    }
+    cursor = page.next_cursor || null;
+    if (!cursor || data.length === 0) break;
+  }
+  return out;
+}
+
+const _num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+
+/**
+ * List ALL primary quotes created within a timeframe, across every stage, for
+ * the Executive Report. Returns a slim per-quote shape with totals + margins.
+ */
+export async function listQuotesInRange(settings, opts = {}) {
+  const out = [];
+  let cursor = null;
+  for (let i = 0; i < 60; i++) {
+    let qs = `?filter[primary]=eq:true&sort=-record_created_at&page_size=100`;
+    if (opts.after)  qs += `&filter[record_created_at]=gt:${encodeURIComponent(opts.after)}`;
+    if (opts.before) qs += `&filter[record_created_at]=lt:${encodeURIComponent(opts.before)}`;
+    if (cursor) qs += `&cursor=${encodeURIComponent(cursor)}`;
+    const page = await quoterFetch(settings, `/v1/quotes${qs}`, { method: "GET" });
+    const data = page.data || [];
+    for (const q of data) {
+      const monthly = _num(q.monthly_total_decimal);
+      const annual = _num(q.annual_total_decimal) || monthly * 12;
+      const monthlyMargin = _num(q.monthly_margin_decimal);
+      const annualMargin = _num(q.annual_margin_decimal) || monthlyMargin * 12;
+      out.push({
+        id: q.id,
+        number: q.number,
+        customNumber: q.custom_number || null,
+        name: q.name || "",
+        client: q.client?.name || q.billing_organization || "",
+        owner: [q.owner_first_name, q.owner_last_name].filter(Boolean).join(" ") || (q.owner_id || "—"),
+        stage: q.stage || "",
+        createdAt: q.record_created_at || null,
+        wonAt: q.won_at || null,
+        currency: q.currency_iso || "USD",
+        oneTime: _num(q.one_time_total_decimal) + _num(q.upfront_total_decimal),
+        oneTimeMargin: _num(q.one_time_margin_decimal) + _num(q.upfront_margin_decimal),
+        recurringAnnual: annual,
+        recurringAnnualMargin: annualMargin,
+      });
+    }
+    cursor = page.next_cursor || null;
+    if (!cursor || data.length === 0) break;
+  }
+  return out;
 }

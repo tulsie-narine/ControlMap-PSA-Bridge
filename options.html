@@ -2,12 +2,14 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>ControlMap Bridge — Settings</title>
+  <title>ScalePad Atlas — Settings</title>
   <style>
     * { box-sizing: border-box; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
     body { margin: 0; background: #f4f5fa; color: #1c2030; }
     .wrap { max-width: 720px; margin: 24px auto; padding: 0 16px; }
-    h1 { font-size: 20px; }
+    .appheader { background: #5fb35d; color: #fff; display: flex; align-items: center; gap: 18px; padding: 18px 24px; }
+    .appheader img { height: 100px; width: auto; border-radius: 16px; flex-shrink: 0; }
+    .appheader h1 { margin: 0; font-size: 34px; font-weight: 800; letter-spacing: .3px; color: #fff; }
     .card { background: #fff; border: 1px solid #e6e8f0; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
     .card h2 { margin: 0 0 12px; font-size: 15px; }
     label { display: block; font-size: 12px; font-weight: 600; color: #555c70; margin: 10px 0 4px; }
@@ -27,6 +29,11 @@
     .psa-tab.active { border-color: #7c5cff; color: #7c5cff; background: #f5f2ff; }
     .psa-pane { display: none; }
     .psa-pane.active { display: block; }
+    .prod-tabs { display: flex; gap: 8px; margin: 4px 0 16px; }
+    .prod-tab { flex: 1; padding: 11px; border: 2px solid #ccd0dd; border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 700; color: #555c70; }
+    .prod-tab.active { border-color: #7c5cff; color: #7c5cff; background: #f5f2ff; }
+    .prodpane { display: none; }
+    .prodpane.active { display: block; }
     .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 10px; }
     .tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px 12px 14px; border: 2px solid #e6e8f0; border-radius: 10px; background: #fff; cursor: pointer; }
     .tile:hover { border-color: #7c5cff; box-shadow: 0 4px 14px rgba(80,60,220,.12); }
@@ -46,14 +53,29 @@
     .mbody { padding: 16px 20px; }
     .mfoot { padding: 12px 20px; border-top: 1px solid #e6e8f0; display: flex; justify-content: flex-end; gap: 8px; }
     .mfoot .btn { margin: 0; }
+    .mtabs { display: flex; gap: 6px; border-bottom: 1px solid #e6e8f0; padding: 0 20px; }
+    .mtab { padding: 10px 14px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 600;
+            color: #8a90a5; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .mtab.active { color: #7c5cff; border-bottom-color: #7c5cff; }
+    .mpane { display: none; }
+    .mpane.active { display: block; }
+    .emap-row { display: grid; grid-template-columns: 1fr 1.3fr; gap: 10px; align-items: start;
+                padding: 8px 0; border-bottom: 1px solid #f1f2f7; }
+    .emap-row .ck { font-size: 12px; }
+    .emap-row .ck b { display: block; color: #1c2030; }
+    .emap-row .ck small { color: #8a90a5; }
+    .emap-ctl select, .emap-ctl input { margin-top: 4px; }
   </style>
 </head>
 <body>
+  <header class="appheader">
+    <img src="assets/icons/atlas-128.png" alt="ScalePad Atlas" />
+    <h1>ScalePad Atlas</h1>
+  </header>
   <div class="wrap">
-    <h1>ControlMap Bridge</h1>
 
     <div class="card">
-      <h2>ScalePad / ControlMap API</h2>
+      <h2>ScalePad Platform API</h2>
       <label>API key</label>
       <input id="spKey" type="password" placeholder="xxxxxxxx-xxxxxxxx-…" />
       <div class="hint">Generate in the ScalePad app (Settings → API). Stored locally in your browser only.</div>
@@ -67,6 +89,15 @@
       <button class="btn ghost" id="testSp">Test connection</button>
       <div class="msg" id="spMsg"></div>
     </div>
+
+    <div class="prod-tabs">
+      <button class="prod-tab active" data-prod="controlmap" type="button">ControlMap</button>
+      <button class="prod-tab" data-prod="lifecycle" type="button">Lifecycle Manager</button>
+      <button class="prod-tab" data-prod="quoter" type="button">Quoter</button>
+      <button class="prod-tab" data-prod="backupradar" type="button">Backup Radar</button>
+    </div>
+
+    <div class="prodpane active" id="prodPane-controlmap">
 
     <div class="card">
       <h2>Integrations</h2>
@@ -117,6 +148,42 @@
       <h2>Client → company mappings (current PSA)</h2>
       <div class="hint">Saved automatically the first time you create a ticket for a client. Remove a row to re-map.</div>
       <table id="mapTable"><thead><tr><th>ControlMap client</th><th>PSA company</th><th></th></tr></thead><tbody></tbody></table>
+    </div>
+
+    </div><!-- /prodPane-controlmap -->
+
+    <div class="prodpane" id="prodPane-lifecycle">
+      <div class="card">
+        <h2>Lifecycle Manager</h2>
+        <div class="hint">No settings yet — tools for Lifecycle Manager will appear here.</div>
+      </div>
+    </div>
+
+    <div class="prodpane" id="prodPane-quoter">
+      <div class="card">
+        <h2>Distributors</h2>
+        <div class="hint">Map each Quoter <b>Supplier</b> name to an order email and, optionally, a distributor <b>API</b> so Atlas can push the PO directly. The name must match the supplier shown on Quoter items (e.g. <b>Ingram Micro</b>, <b>TD SYNNEX</b>, <b>D&amp;H</b>). Credentials are stored locally in your browser only and are never sent to the page.</div>
+        <div class="row">
+          <div>
+            <label>Distributor (Supplier name)</label>
+            <input id="dsName" type="text" placeholder="Ingram Micro" autocomplete="off" />
+          </div>
+          <div>
+            <label>Order email</label>
+            <input id="dsEmail" type="text" placeholder="orders@ingrammicro.com" autocomplete="off" />
+          </div>
+        </div>
+        <button class="btn ghost" id="dsAdd" type="button">Add distributor</button>
+        <div class="msg" id="dsMsg"></div>
+        <div id="distCards"></div>
+      </div>
+    </div>
+
+    <div class="prodpane" id="prodPane-backupradar">
+      <div class="card">
+        <h2>Backup Radar</h2>
+        <div class="hint">No settings yet — tools for Backup Radar will appear here.</div>
+      </div>
     </div>
 
     <button class="btn" id="save">Save settings</button>
